@@ -2,7 +2,7 @@
 typedef struct
 {
   int n_dimensions;
-  int* point; // point[0] = x index [0,Ngrid], point[1] = y index, etc.
+  int* point; // point[0] = x index [0,Ngrid_max], point[1] = y index, etc.
   double prob; // 
   int xhalf; // 0 means  
   int yhalf; // 
@@ -45,23 +45,23 @@ typedef struct
 typedef struct
 {
   int n_dimensions; // must be 2 for now.
-  int Ngrid; // grid [0,Ngrid] each dimension
+  int Ngrid_max; // grid [0,Ngrid_max] each dimension
   double** pi; // pi[i][j] is probability (unnormalized) of point i,j
 } Target_distribution;
 
 typedef struct
 {
-  int Ngrid; // grid [0,Ngrid] each dimension
+  int Ngrid_max; // grid [0,Ngrid_max] each dimension
   int total_count;
   int** bin_counts; //
 } Histogram_2d;
 
 // function declarations:
-State* initialize_state(int n_dimensions, int Ngrid, Target_distribution* targp);
+State* initialize_state(int n_dimensions, int Ngrid_max, Target_distribution* targp);
 int mcmc_step(State* the_state, Proposal* prop, Target_distribution* targp, Histogram_2d* hist2d);
 double f(double x);
-int propose_1dim(int i, int Width, int Ngrid);
+int propose_1dim(int i, int Width, int Ngrid_max);
 double drand(void);
-Target_distribution* initialize_pi(int n_dimensions, int Ngrid);
-Histogram_2d* initialize_histogram_2d(int Ngrid);
+Target_distribution* initialize_pi(int n_dimensions, int Ngrid_max);
+Histogram_2d* initialize_histogram_2d(int Ngrid_max);
 double total_variation_distance(Target_distribution* targp, Histogram_2d* hist2d);
