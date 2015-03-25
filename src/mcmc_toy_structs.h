@@ -18,7 +18,7 @@ typedef struct
 
 typedef struct
 {
-  State current_state;
+  State* current_state;
   double temperature;
   int generation;
   Proposal proposal; // each T can have its own proposal
@@ -27,7 +27,7 @@ typedef struct
 typedef struct
 {
   int n_temperatures;
-  Single_T_chain* coupled_chains; // array of metropolis-coupled chains at different T's
+  Single_T_chain** coupled_chains; // array of metropolis-coupled chains at different T's
 } Multi_T_chain;
 
 typedef struct
@@ -65,15 +65,26 @@ typedef struct
 State* construct_state(int n_dimensions, int Ngrid_max); //, Target_distribution* targp);
 void free_state(State* s);
 
+// Single_T_chain
+Single_T_chain* construct_single_T_chain(double T, Proposal P, State* S);
+State* single_T_chain_mcmc_step(Single_T_chain* chain);
+void free_single_T_chain(Single_T_chain* chain);
+// Multi_T_chain
+Multi_T_chain* construct_multi_T_chain(int n_temperatures, double* temperatures, Proposal* proposals, State** states);
+void multi_T_chain_within_T_mcmc_step(Multi_T_chain* multi_T_chain);
+void multi_T_chain_T_swap_mcmc_step(Multi_T_chain* multi_T_chain);
+void free_multi_T_chain(Multi_T_chain* chain);
 // Ndim_histogram
 Ndim_histogram* construct_histogram_ndim(int Ndim, int Ngrid_max);
+Ndim_histogram* construct_copy_histogram_ndim(Ndim_histogram* A);
 void normalize_ndim_histogram(Ndim_histogram* pdf);
 double total_variation_distance(Ndim_histogram* targp, Ndim_histogram* mcmc_out);
 Ndim_histogram* init_target_distribution(int Ndim, int Ngrid_max, int normalize);
-void free_histogram_ndim(Ndim_histogram* h);
+void* free_histogram_ndim(Ndim_histogram* h);
 
 // Ndim_array_of_double
 Ndim_array_of_double* construct_ndim_array_of_double(int Ndim, int Nsize, double init_value);
+Ndim_array_of_double* construct_copy_ndim_array_of_double(Ndim_array_of_double* A);
 double* get_pointer_to_element(Ndim_array_of_double* A, int* index_array);
 double sum_ndim_array_of_double(Ndim_array_of_double* array_struct);
 double set_ndim_array_of_double_with_function(Ndim_array_of_double* array_struct,
