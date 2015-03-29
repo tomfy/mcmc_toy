@@ -33,6 +33,9 @@ int* i_array_from_x_array(int Ndim, double* x_array);
 int i_from_x(double x);
 double* x_array_from_i_array(int Ndim, int* i_array);
 double x_from_i(int i);
-double draw_1dim(void);
 
 int x_to_bin(Binning_spec* bin_spec, double x);
+
+double* draw_ndim(int Ndim, int n_modes, Targ_peak_1dim* peaks);
+
+double draw_1dim(int n_modes, Targ_peak_1dim* peaks);

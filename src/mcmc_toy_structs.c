@@ -18,8 +18,9 @@ State* construct_state(int n_dimensions, int Ngrid_max){
   the_state->ipoint = (int*)malloc(n_dimensions*sizeof(int));
 the_state->point = (double*)malloc(n_dimensions*sizeof(double));
   for(int i=0; i<n_dimensions; i++){
-    the_state->ipoint[i] = (int)( drand() * (Ngrid_max+1) );
-    the_state->point[i] = (double)( drand() * 1.0);
+    //  the_state->ipoint[i] = (int)( drand() * (Ngrid_max+1) ); 
+    the_state->point = draw_ndim(n_dimensions, n_modes, peaks); // draw from target distribution
+      // [i] = (double)( drand() * 1.0);
   }
   the_state->prob = F(n_dimensions, the_state->point);
   return the_state;
@@ -33,6 +34,7 @@ void free_state(State* s){
 // Single_T_chain
 Single_T_chain* construct_single_T_chain(double T, Proposal P, State* S){
  Single_T_chain* single_T_chain = (Single_T_chain*)malloc(sizeof(Single_T_chain));
+ 
     single_T_chain->current_state = S;
     single_T_chain->temperature = T;
     single_T_chain->generation = 0;
@@ -80,6 +82,7 @@ State* single_T_chain_mcmc_step(Single_T_chain* chain){
     free(prop_x_array);
     // dsq += 0 
   }
+  
   //  printf("%8i ", chain->generation); print_array_of_double(Ndim, the_state->point); printf("\n");
   //  print_array_of_double(Ndim, the_state->point); printf("\n");
   sum_dsq += (double)dsq;
@@ -96,7 +99,9 @@ State* single_T_chain_mcmc_step(Single_T_chain* chain){
   }
   chain->generation++;
   printf("%8i ", chain->generation); print_array_of_double(Ndim, the_state->point); 
-  printf("  "); print_array_of_int(Ndim, index_array); printf("\n");
+  printf("  "); print_array_of_int(Ndim, index_array); 
+  printf("  "); print_array_of_double(Ndim, draw_ndim(Ndim, n_modes, peaks));
+printf("\n");
 
   if(OUTPUT_TVD_VS_N){
 	if(chain->generation%1000 == 0){

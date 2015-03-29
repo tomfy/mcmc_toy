@@ -261,18 +261,6 @@ double f_1dim(double x){
   return f;
 }
 
-double draw_1dim(void){
-  double p = peaks[0].weight;
-  double drnd = drand();
-  for(int i=0; i<n_modes; i++){
-    p += peaks[i].weight;
-    if(drnd < p){ // draw from i_th peak
-      return gsl_ran_gaussian(the_rng, peaks[i].sigma) + peaks[i].position;
-    }
-  }
-  // shouldn't get here if normalization is right, but in case ...
-  return gsl_ran_gaussian(the_rng, peaks[n_modes-1].sigma) + peaks[n_modes-1].position;
-}
 
 double drand(void){
   return (double)rand() / ((double)RAND_MAX + 1);
@@ -298,10 +286,10 @@ double total_variation_distance(Ndim_histogram* targp, Ndim_histogram* mcmc_out)
   // both distributions must be normalized ahead of time
   Ndim_array_of_double* a1 = targp->weights;
   Ndim_array_of_double* a2 = mcmc_out->weights;
-  printf("# targp\n#");
-  print_ndim_array_of_double(a1);
-  printf("# hist\n#");
-  print_ndim_array_of_double(a2);
+  /* printf("# targp\n#"); */
+  /* print_ndim_array_of_double(a1); */
+  /* printf("# hist\n#"); */
+  /* print_ndim_array_of_double(a2); */
    double tvd = 0.5 * sum_abs_difference_ndim_arrays_of_double(targp->weights, mcmc_out->weights); 
   return tvd;
 }
@@ -357,3 +345,41 @@ int x_to_bin(Binning_spec* bin_spec, double x){
 }
   return r1; //min_bin;
 }
+
+double draw_1dim(int n_modes, Targ_peak_1dim* peaks){
+  double wsum = 0.0;
+  for(int i=0; i<n_modes; i++){
+    wsum += peaks[i].weight;
+  }
+  double random_number = drand();
+  double w = 0.0;
+  for(int i=0; i<n_modes; i++){
+    peaks[i].weight /= wsum;
+    w += peaks[i].weight;
+    if( random_number < w ){
+      return gsl_ran_gaussian(the_rng, peaks[i].sigma) + peaks[i].position;
+    }
+  }
+  return gsl_ran_gaussian(the_rng, peaks[n_modes-1].sigma) + peaks[n_modes-1].position;
+}
+
+double* draw_ndim(int Ndim, int n_modes, Targ_peak_1dim* peaks){
+  double* xs = (double*)malloc(Ndim*sizeof(double));
+  for(int i=0; i<Ndim; i++){
+    xs[i] = draw_1dim(n_modes, peaks);
+  }
+  return xs;
+}
+
+/* double draw_1dim(int n_mode, Targ_peak_1dim* peaks){ */
+/*   double p = 0.0; */
+/*   double drnd = drand(); */
+/*   for(int i=0; i<n_modes; i++){ */
+/*     p += peaks[i].weight; */
+/*     if(drnd < p){ // draw from i_th peak */
+/*       return gsl_ran_gaussian(the_rng, peaks[i].sigma) + peaks[i].position; */
+/*     } */
+/*   } */
+/*   // shouldn't get here if normalization is right, but in case ... */
+/*   return gsl_ran_gaussian(the_rng, peaks[n_modes-1].sigma) + peaks[n_modes-1].position; */
+/* } */
