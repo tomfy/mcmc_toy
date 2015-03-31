@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <math.h>
 #include <stdio.h>
+#include <string.h>
 #include <time.h>
 #include <assert.h>
 #include <gsl/gsl_rng.h>
@@ -9,16 +10,11 @@
 #include "mcmc_toy_structs.h"
 #include "mcmc_toy.h"
 
+const Target_1dim* g_targ_1d;
 const Ndim_histogram* g_targp;
 
-// control parameters and default values:
-int g_Ngrid_max = 25;
-int g_is_ball = 1;
-int g_n_modes = 2;
-const Target_1dim* g_targ_1d;
-Target_peak_1dim* g_peaks;
-const gsl_rng_type* g_rng_type;
 gsl_rng* g_rng;
+
 FILE* tvd_vs_gen_fstream; 
 
 // main:
@@ -48,7 +44,7 @@ int main(int argc, char* argv[]){
   g_targ_1d = (const Target_1dim*)targ_1d;
 
 
-  int next_arg = 3 + 3*g_n_modes;
+  int next_arg = 3 + 3*targ_1d->n_modes;
   int burn_in_steps = atoi(argv[next_arg]);
   int mcmc_steps = atoi(argv[next_arg+1]);
   int Nreps = atoi(argv[next_arg+2]);
@@ -59,60 +55,40 @@ int main(int argc, char* argv[]){
   double* temperatures = (double*)malloc(n_temperatures*sizeof(double));
   Proposal* proposals = (Proposal*)malloc(n_temperatures*sizeof(Proposal));
   for(int j=0; j<n_temperatures; j++){
-    temperatures[j] = atof(argv[next_arg + 4*j]);
-    proposals[j].W1 = atof(argv[next_arg+1 + 4*j]);
-    proposals[j].W2 = atof(argv[next_arg+2 + 4*j]);
-    proposals[j].p1 = atof(argv[next_arg+3 + 4*j]);
-    printf("#  T,W1,W2,p1:  %8.5f %8.5f %8.5f %8.5f \n", temperatures[j], proposals[j].W1, proposals[j].W2, proposals[j].p1);
+    temperatures[j] = atof(argv[next_arg + 5*j]);
+    proposals[j].shape = argv[next_arg+1 + 5*j];
+    printf("%s \n", proposals[j].shape);
+    proposals[j].W1 = atof(argv[next_arg+2 + 5*j]);
+    proposals[j].W2 = atof(argv[next_arg+3 + 5*j]);
+    proposals[j].p1 = atof(argv[next_arg+4 + 5*j]);
+    printf("#  T, Shape, W1,W2,p1:  %8.5f %12s %8.5f %8.5f %8.5f \n", 
+	   temperatures[j], proposals[j].shape, proposals[j].W1, proposals[j].W2, proposals[j].p1);
   }
-  next_arg += 4*n_temperatures;
-  g_is_ball = atoi(argv[next_arg]);
-  g_Ngrid_max = atoi(argv[next_arg+1]);
-  printf("# is ball, g_Ngrid_max: %i %i \n", g_is_ball, g_Ngrid_max);
+  next_arg += 5*n_temperatures;
+  int n_bins = atoi(argv[next_arg]);
+  n_bins += (n_bins % 2); // to make it even
+  printf("#  n_bins: %i \n", n_bins);
   // ******************************************************************
   //  normalize_targ_1dim(g_n_modes, g_peaks); //
 
   // *************** set up RNG *****************
+
   gsl_rng_env_setup();
-  g_rng_type = gsl_rng_default;
-  g_rng = gsl_rng_alloc(g_rng_type);
+  const gsl_rng_type* rng_type = gsl_rng_default;
+  g_rng = gsl_rng_alloc(rng_type);
 
   // *************** open output files *************
   tvd_vs_gen_fstream = fopen("tvd_vs_gen", "w");
 
-  g_Ngrid_max += g_Ngrid_max % 2; // if odd, add one, to make it be even.
+  //g_Ngrid_max += g_Ngrid_max % 2; // if odd, add one, to make it be even.
 
   // /*  ********** get bin boundaries ****************
-  //  g_bins = construct_binning_spec(g_Ngrid_max, g_peaks);
-  const Binning_spec* the_bins = construct_binning_spec(g_Ngrid_max, targ_1d);
-  //  printf("ZZZZZ %i \n", (int)sizeof(g_bins));
-/* printf("%p \n", g_bins); */
-/*   g_bins->n_g_bins = 13; */
-/*     printf("ZZZZZ\n"); */
- /* printf("g_bins->n_bins: %i \n", g_bins->n_bins); */
- /* printf("g_bins->bin_edges: %p \n", g_bins->bin_edges); */
- /*  printf("g_bins->x_lo: %g \n", g_bins->x_lo); */
- /*  print_array_of_double(g_bins->n_bins, g_bins->bin_edges); */
-  //  exit(0);
-  // ********************************
-  // */
-
-  time_t t;
-  srand( (unsigned) time(&t) );
-  //  srand((unsigned)1234567);
+  const Binning_spec* the_bins = construct_binning_spec(n_bins, targ_1d);
  
-  printf("before targp\n");
-  // printf("g_bins->bin_edges: %p \n", g_bins->bin_edges);
-  Ndim_histogram* targp = init_target_distribution(n_dimensions, g_Ngrid_max, 1, the_bins);
- printf("after targp\n");
+  Ndim_histogram* targp = init_target_distribution(n_dimensions, n_bins, 1, the_bins);
   g_targp = targp;
-  // printf("after targp \n");
   double tvd_sum = 0.0;
   double tvdsq_sum = 0.0;
-  int n_jumps = 0;
-  int Naccept_sum = 0;
-  int Nreject_sum = 0;
-  //sum_dsq = 0.0;
 
   for(int j=0; j<Nreps; j++){
     State** states = (State**)malloc(n_temperatures*sizeof(State*));
@@ -121,51 +97,25 @@ int main(int argc, char* argv[]){
     }
     printf("after construct states \n");
     Multi_T_chain* multi_T_chain = construct_multi_T_chain(n_temperatures, temperatures, proposals, states, the_bins);
-    // printf("after multi_T_chain \n");
-    // ********** do burn-in ***********
-    //	  State* the_state = construct_state(n_dimensions, Ngrid_max);
+  
+  // ********** do burn-in ***********
     for(int n=0; n<=burn_in_steps; n++){
       multi_T_chain_within_T_mcmc_step(multi_T_chain);
     } 
-    // printf("after burn-in\n");
+
     // ********** do post-burn-in *********
-    //  g_n_accept = 0;
-    //  g_n_reject = 0;
-    //  mcmc_out_hist = construct_ndim_histogram(n_dimensions, Ngrid_max);
-    // printf("after construct ndim hist\n");
     double tvd = 0.0;
     for(int n=1; n<=mcmc_steps; n++){   
       // take a mcmc step
-      //	  n_jumps += mcmc_step(the_state, &proposal);
-      //    printf("before mcmc_step %i \n", n);
-      multi_T_chain_within_T_mcmc_step(multi_T_chain);
-	
-      /* if(OUTPUT_TVD_VS_N){ */
-      /* 	if(n%10000 == 0){ */
-      /* 	  Ndim_histogram* hist_copy = construct_copy_ndim_histogram(mcmc_out_hist); */
-      /* 	  normalize_ndim_histogram(hist_copy); */
-      /* 	  tvd = total_variation_distance(targp, hist_copy); */
-      /* 	  printf("#%8i %12.6g\n", n, tvd); */
-      /* 	  free_ndim_histogram(hist_copy); */
-      /* 	} */
-      /* } */
+      multi_T_chain_within_T_mcmc_step(multi_T_chain);   
     }
 
-    /* Ndim_histogram* hist_copy = construct_copy_ndim_histogram(mcmc_out_hist); */
-    /* normalize_ndim_histogram(hist_copy); */
-    /* tvd = total_variation_distance(targp, hist_copy); */
-    /* printf("#%8i %12.6g\n", mcmc_steps, tvd); */
-    /* free_ndim_histogram(hist_copy); */
-    //	  printf("\n\n");
     tvd_sum += tvd;
     tvdsq_sum += tvd*tvd;
-    //   Naccept_sum += g_n_accept;
-    //  Nreject_sum += g_n_reject;
-    //  free_state(the_state);
-    //  mcmc_out_hist = free_ndim_histogram(mcmc_out_hist);
-    //	printf("bottom of Nrep loop. j: %i \n", j);
+ 
+    free_multi_T_chain(multi_T_chain);
   } // end loop over reps
-  //sum_dsq /= Nreps*mcmc_steps;
+
   double tvd_avg = tvd_sum/Nreps;
   double tvd_variance = tvdsq_sum/Nreps - tvd_avg*tvd_avg;
   double tvd_stderr = sqrt(tvd_variance)/sqrt((double)Nreps);
@@ -177,47 +127,28 @@ int main(int argc, char* argv[]){
 
 
 // propose uniformly from cube or ball centered on present point
-double* propose(int Ndim, double* x_array, Proposal* prop, int is_ball){
-  double* prop_x_array = (double*)malloc(Ndim*sizeof(double));
+double* propose(int n_dim, double* x_array, Proposal* prop){
+  double* prop_x_array = (double*)malloc(n_dim*sizeof(double));
   //  printf("porposal:: %8.5f %8.5f %8.5f \n", prop->W1, prop->W2, prop->p1);
   double Width = (drand() < prop->p1)? (double)prop->W1 : (double)prop->W2;
-  while(1){
-    double sum_sq = 0;
-    for(int i = 0; i<Ndim; i++){
-      double delta_x = (double)(2*Width*drand()) - Width;
-      //   printf("width: %12.5g  delta_x: %12.5g \n", Width, delta_x);
-      prop_x_array[i] = x_array[i] + delta_x;
-      sum_sq += delta_x*delta_x;
+  if(!strcmp(prop->shape, "gaussian")){
+    for(int i=0; i<n_dim; i++){
+      prop_x_array[i] = x_array[i] + gsl_ran_gaussian(g_rng, Width);
     }
-    if(!is_ball  || sum_sq <= Width*Width) break;
+  }else{
+    while(1){
+      double sum_sq = 0;
+      for(int i = 0; i<n_dim; i++){
+	double delta_x = (double)(2*Width*drand()) - Width;
+	//   printf("width: %12.5g  delta_x: %12.5g \n", Width, delta_x);
+	prop_x_array[i] = x_array[i] + delta_x;
+	sum_sq += delta_x*delta_x;
+      }
+      if(!strcmp(prop->shape, "cube")  || sum_sq <= Width*Width) break;
+    }
   }
   return prop_x_array;
 }
-
-
-
-/* int i_from_x(double x){ // xmin, xmax, Ngrid_max are global */
-/*   int gridpoint; */
-/*   if(x <= Xmin){ */
-/*     gridpoint = 0; */
-/*   }else if(x >= Xmax){ */
-/*     gridpoint = Ngrid_max; */
-/*   }else{ */
-/*     gridpoint = (int)(Ngrid_max * (x-Xmin)/(Xmax-Xmin) + 0.5); */
-/*   } */
-/*   return gridpoint; */
-/* } */
-/* double* x_array_from_i_array(int Ndim, int* i_array){ */
-/*   double* x_array = (double*)malloc(Ndim*sizeof(double)); */
-/*   for(int i=0; i<Ndim; i++){ */
-/*     x_array[i] = x_from_i(i_array[i]); */
-/*   } */
-/*   return x_array; */
-/* } */
-/* double x_from_i(int i){ */
-/*   double x; */
-/*   return Xmin + (double)i/Ngrid_max * (Xmax - Xmin); */
-/* } */
 
 double F(const Target_1dim* targ_1d, int n_dim, double* x_array){
   double result = 1.0;
@@ -243,7 +174,8 @@ double f_1dim(const Target_1dim* targ_1d, double x){
 
 
 double drand(void){
-  return (double)rand() / ((double)RAND_MAX + 1);
+  //  return (double)rand() / ((double)RAND_MAX + 1);
+    return gsl_rng_uniform(g_rng);
 }
 
 Ndim_histogram* init_target_distribution(int Ndim, int Ngrid_max, int normalize, const Binning_spec* bins){
@@ -264,12 +196,6 @@ Ndim_histogram* init_target_distribution(int Ndim, int Ngrid_max, int normalize,
 
 double total_variation_distance(const Ndim_histogram* targp, const Ndim_histogram* mcmc_out){
   // both distributions must be normalized ahead of time
-  Ndim_array_of_double* a1 = targp->weights;
-  Ndim_array_of_double* a2 = mcmc_out->weights;
-  /* printf("# targp\n#"); */
-  /* print_ndim_array_of_double(a1); */
-  /* printf("# hist\n#"); */
-  /* print_ndim_array_of_double(a2); */
    double tvd = 0.5 * sum_abs_difference_ndim_arrays_of_double(targp->weights, mcmc_out->weights); 
   return tvd;
 }
@@ -314,6 +240,10 @@ double* draw_ndim(int n_dim, const Target_1dim* targ_1d){
   return xs;
 }
 
+
+
+// ***** unused/obsolete stuff ****
+
 /* double draw_1dim(int n_mode, Target_peak_1dim* peaks){ */
 /*   double p = 0.0; */
 /*   double drnd = drand(); */
@@ -341,4 +271,27 @@ double* draw_ndim(int n_dim, const Target_1dim* targ_1d){
 /*     if((sum_sq > 0) && (!is_ball  || sum_sq <= Width*Width)) break; */
 /*   } */
 /*   return prop_index_array; */
+/* } */
+
+/* int i_from_x(double x){ // xmin, xmax, Ngrid_max are global */
+/*   int gridpoint; */
+/*   if(x <= Xmin){ */
+/*     gridpoint = 0; */
+/*   }else if(x >= Xmax){ */
+/*     gridpoint = Ngrid_max; */
+/*   }else{ */
+/*     gridpoint = (int)(Ngrid_max * (x-Xmin)/(Xmax-Xmin) + 0.5); */
+/*   } */
+/*   return gridpoint; */
+/* } */
+/* double* x_array_from_i_array(int Ndim, int* i_array){ */
+/*   double* x_array = (double*)malloc(Ndim*sizeof(double)); */
+/*   for(int i=0; i<Ndim; i++){ */
+/*     x_array[i] = x_from_i(i_array[i]); */
+/*   } */
+/*   return x_array; */
+/* } */
+/* double x_from_i(int i){ */
+/*   double x; */
+/*   return Xmin + (double)i/Ngrid_max * (Xmax - Xmin); */
 /* } */

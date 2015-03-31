@@ -1,10 +1,7 @@
-extern int g_Ngrid_max;
-//extern double sigma;
-extern int g_is_ball;
-extern int g_n_modes;
+//extern int g_Ngrid_max;
+//extern int g_is_ball;
 extern const Target_1dim* g_targ_1d;
 extern const Ndim_histogram* g_targp;
-extern Target_peak_1dim* g_peaks;
 extern const gsl_rng_type* g_rng_type;
 extern gsl_rng* g_rng;
 extern FILE* tvd_vs_gen_fstream; 
@@ -21,7 +18,7 @@ extern FILE* tvd_vs_gen_fstream;
 
 // function declarations:
 int propose_1dim(int i, int Width, int Ngrid_max);
-double* propose(int Ndim, double* x_array, Proposal* prop, int is_ball);
+double* propose(int Ndim, double* x_array, Proposal* prop);
 
 double drand(void);
 

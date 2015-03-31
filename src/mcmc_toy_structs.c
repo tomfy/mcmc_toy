@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <math.h>
 #include <stdio.h>
+#include <string.h>
 #include <assert.h>
 #include <gsl/gsl_rng.h>
 #include <gsl/gsl_randist.h>
@@ -42,7 +43,7 @@ Single_T_chain* construct_single_T_chain(double T, Proposal P, State* S, const B
   single_T_chain->dsq_sum = 0.0;
   single_T_chain->n_jumps = 1;
   //   single_T_chain->bins = bins;
-  single_T_chain->mcmc_out_hist = construct_ndim_histogram(S->n_dimensions, g_Ngrid_max);
+  single_T_chain->mcmc_out_hist = construct_ndim_histogram(S->n_dimensions, bins);
   single_T_chain->mcmc_out_hist->bins = bins;
   return single_T_chain;
 }
@@ -56,7 +57,7 @@ State* single_T_chain_mcmc_step(Single_T_chain* chain){
   double p_of_current_state = pow( the_state->prob, inverse_T );
 
   Proposal prop = chain->proposal;
-  double* prop_x_array = propose(Ndim, x_array, &prop, g_is_ball);
+  double* prop_x_array = propose(Ndim, x_array, &prop);
   double p_of_proposed_state = pow( F(g_targ_1d, Ndim, prop_x_array), inverse_T );
 
   int n_jumps = 0;
@@ -107,7 +108,9 @@ void single_T_chain_output_tvd(Single_T_chain* chain){
 
 void free_single_T_chain(Single_T_chain* chain){
   free_state(chain->current_state);
+  free_ndim_histogram(chain->mcmc_out_hist);
   free(chain);
+  
 }
 
 // Multi_T_chain
@@ -128,8 +131,10 @@ void multi_T_chain_within_T_mcmc_step(Multi_T_chain* multi_T_chain){
     single_T_chain_mcmc_step( chain );
     if(OUTPUT_SAMPLES){
       printf("%6i ", chain->generation); print_array_of_double(n_dim, chain->current_state->point); 
-      printf("  "); print_array_of_double(n_dim, draw_ndim(n_dim, g_targ_1d));
+      double* xs = draw_ndim(n_dim, g_targ_1d);
+      printf("  "); print_array_of_double(n_dim, xs);
       printf("\n");
+      free(xs);
     }
     single_T_chain_histogram_current_state(multi_T_chain->coupled_chains[i]);
     if(OUTPUT_TVD_VS_N){
@@ -149,13 +154,15 @@ void free_multi_T_chain(Multi_T_chain* chain){
 
 
 // Ndim Histogram
-Ndim_histogram* construct_ndim_histogram(int Ndim, int n_bins){ // there are bin boundaries x_0, .. x_Ngrid_max, and
-  // bins 0 through Ngrid_max+1 ; so Ngrid_max+2 bins!
+Ndim_histogram* construct_ndim_histogram
+// (int Ndim, int n_bins){ // there are bin boundaries x_0, .. x_Ngrid_max, and
+(int n_dim, const Binning_spec* bins){
+ 
   Ndim_histogram* histogram = (Ndim_histogram*)malloc(sizeof(Ndim_histogram));
-  histogram->Ndim = Ndim;
-  histogram->Ngrid_max = g_Ngrid_max;
+  histogram->Ndim = n_dim;
+  histogram->Ngrid_max = bins->n_bins;
   histogram->total_weight = 0;
-  histogram->weights = construct_ndim_array_of_double(Ndim, n_bins, 0.0);
+  histogram->weights = construct_ndim_array_of_double(n_dim, bins->n_bins, 0.0);
   return histogram;
 }
 
@@ -173,6 +180,7 @@ void add_data_pt_to_ndim_histogram(Ndim_histogram* A, int n_dim, double* xs){
   double* bp = get_pointer_to_element(A->weights, i_array); 
   (*bp) += 1.0;
   A->total_weight += 1.0;
+  free(i_array);
 }
 
 void* free_ndim_histogram(Ndim_histogram* h){

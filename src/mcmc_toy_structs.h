@@ -56,6 +56,7 @@ typedef struct
 
 typedef struct
 {
+  char* shape; // "cube", "ball", "gaussian"
   double W1; // 
   double W2;
   double p1; // prob of the W1 
@@ -105,7 +106,7 @@ void multi_T_chain_within_T_mcmc_step(Multi_T_chain* multi_T_chain);
 void multi_T_chain_T_swap_mcmc_step(Multi_T_chain* multi_T_chain);
 void free_multi_T_chain(Multi_T_chain* chain);
 // Ndim_histogram
-Ndim_histogram* construct_ndim_histogram(int Ndim, int Ngrid_max);
+Ndim_histogram* construct_ndim_histogram(int n_dim, const Binning_spec* bins); //(int Ndim, int Ngrid_max);
 Ndim_histogram* construct_copy_ndim_histogram(Ndim_histogram* A);
 void normalize_ndim_histogram(Ndim_histogram* pdf);
 double total_variation_distance(const Ndim_histogram* targp, const Ndim_histogram* mcmc_out);
