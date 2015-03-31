@@ -5,13 +5,10 @@ use Getopt::Long;
 # n_dimensions n_modes x1 sigma1 w1 x1 sigma2 w2 ...
 
 # burn_in_steps mcmc_steps n_replicates
-# n_temperatures T_i  shape_i w1_i w2_i p1_i (for each T)
-
-# proposal parameters
-# is_ball 
+# n_temperatures T_i  shape_i w1_i w2_i p1_i (T and proposals for each T) 
 
 # analysis parameters
-# n_grid_max
+# n_bins
 
 
 
@@ -32,7 +29,7 @@ my $arg_string = "3   2   -0.5 0.06 0.5   0.5 0.06 0.5   "; # n_dim, n_modes, ta
 $arg_string .= "1000 40000 1   "; # burn-in steps, post-burn-in steps, replicates
 #$arg_string .= "2   1.0 0.06 1.0 0.9   2.0 0.06 1.0 0.5   "; # n_temperatures, ...
 $arg_string .= "1   1.0  ball 0.1 1.5 0.7   "; # n_temperatures, then T_i, proposal_i
-$arg_string .= "24";  # n_grid_max 
+$arg_string .= "24";  # n_bins
 
 # my $mcmc_toy_out = `~/mcmc_toy/src/mcmc_toy $arg_string `;
 system "~/mcmc_toy/src/mcmc_toy $arg_string";
