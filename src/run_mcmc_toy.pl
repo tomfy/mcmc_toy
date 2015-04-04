@@ -23,16 +23,67 @@ use Getopt::Long;
 # 	   'n_ft_bs=i' => \$n_ft_bs, # number of FastTree bootstraps to do
 # 	   'n_phyml_bs=i' => \$n_phyml_bs, # number of Phyml bootstraps to do
 # 	   #    'ml_bs!' => \$ml_bs, # boolean to do ML bs or not (default: 0)
-# 	   'species_tree=s' => \$species_tree_newick_file,
+# 	   'species_tree=s' => \$species_tree_newick_file, 
 
-my $arg_string = "3   2   -0.5 0.06 0.5   0.5 0.06 0.5   "; # n_dim, n_modes, targ mean, sigma, weight, ...
-$arg_string .= "1000 40000 1   "; # burn-in steps, post-burn-in steps, replicates
-#$arg_string .= "2   1.0 0.06 1.0 0.9   2.0 0.06 1.0 0.5   "; # n_temperatures, ...
-$arg_string .= "1   1.0  ball 0.1 1.5 0.7   "; # n_temperatures, then T_i, proposal_i
-$arg_string .= "24";  # n_bins
+my $n_generations = 100000;
+my $n_burn_in = 0;
+my $n_replicates = 1; # > 1 not implemented 
+my $n_dimensions = 1;
+my $peaks_string = '-0.5, 0.05, 0.5; 0.5, 0.05, 0.5';
+my $n_peaks;
+my $temperatures_string = '1.0';
+my $proposals_string = 'gaussian, 0.119, 1.4, 0.7'; # if multiple proposals, separate with ; e.g. 'gaussian 0.07 1.5 0.9; gaussian ... '
+my %n_bins_hash = (1 => 4096, 2 => 64, 3 => 16, 4 => 8);
+my $n_bins = $n_bins_hash{$n_dimensions};
+GetOptions(
+	   'n_dimensions=i' => \$n_dimensions,
+	   'peaks=s' => \$peaks_string, # e.g. '-0.5,0.05,0.5;0.5,0.05,0.5'  -> 2 peaks
+	   'temperatures=s' => \$temperatures_string, # e.g. '1.0, 1.1, 1.2, 2.0';
+	   'proposals=s' => \$proposals_string, # e.g. 'ball,0.1,1.5,0.9'
+	   'n_bins=i', => \$n_bins,
+	   'n_generations=i', => \$n_generations,
+	   'n_burnin=i', => \$n_burn_in,
+);
+
+
+my @peak_strings = split(";", $peaks_string);
+$n_peaks = scalar @peak_strings;
+for(@peak_strings){
+  s/,/ /g;
+}
+# print "# proposals string: $proposals_string \n";
+
+$temperatures_string =~ s/[,;]/ /g;
+my @temperatures = split(" ", $temperatures_string);
+my $n_temperatures = scalar @temperatures;
+my @proposal_strings = split(";", $proposals_string);
+for(@proposal_strings){
+  s/[,]/ /g;
+}
+while(scalar @proposal_strings < scalar @temperatures){
+  push @proposal_strings, $proposal_strings[scalar @proposal_strings -1]; # duplicate last proposal to get enough
+}
+
+my $the_arg_string = "$n_dimensions  $n_peaks  ";
+$the_arg_string .= join("  ", @peak_strings) . "  ";
+$the_arg_string .= "$n_burn_in $n_generations $n_replicates ";
+$the_arg_string .= "$n_temperatures ";
+for my $i (0..$n_temperatures-1){
+my $T = $temperatures[$i];
+  $the_arg_string .= "$T " . $proposal_strings[$i] . "  ";
+}
+$the_arg_string .= "$n_bins";
+
+print "# $the_arg_string \n";
+
+# my $arg_string = "3   2   -0.5 0.06 0.5   0.5 0.06 0.5   "; # n_dim, n_modes, targ mean, sigma, weight, ...
+# $arg_string .= "0 2000000 1   "; # burn-in steps, post-burn-in steps, replicates
+# #$arg_string .= "2   1.0 ball 0.06 1.0 0.9   2.0 ball 0.06 1.0 0.5   "; # n_temperatures, ...
+# $arg_string .= "1   1.0  ball 0.1 1.5 0.7   "; # n_temperatures, then T_i, proposal_i
+# $arg_string .= "25";  # n_bins
 
 # my $mcmc_toy_out = `~/mcmc_toy/src/mcmc_toy $arg_string `;
-system "~/mcmc_toy/src/mcmc_toy $arg_string";
+system "~/mcmc_toy/src/mcmc_toy $the_arg_string";
 # print "$mcmc_toy_out \n";
 
 

@@ -11,11 +11,14 @@
 #include "mcmc_toy.h"
 
 const Target_1dim* g_targ_1d;
-const Ndim_histogram* g_targp;
+const Ndim_histogram* g_targprobs_ndim;
+const Ndim_histogram* g_targprobs_1dim;
+const Ndim_histogram* g_targprobs_orthants;
+const Ndim_histogram* g_targprobs_one_orthant;
 
 gsl_rng* g_rng;
 
-FILE* tvd_vs_gen_fstream; 
+FILE* g_tvd_vs_gen_fstream; 
 
 // main:
 int main(int argc, char* argv[]){
@@ -47,8 +50,8 @@ int main(int argc, char* argv[]){
   int next_arg = 3 + 3*targ_1d->n_modes;
   int burn_in_steps = atoi(argv[next_arg]);
   int mcmc_steps = atoi(argv[next_arg+1]);
-  int Nreps = atoi(argv[next_arg+2]);
-  printf("# burn-in, mcmc steps, n reps: %i %i %i \n", burn_in_steps, mcmc_steps, Nreps);
+  int n_replicates = atoi(argv[next_arg+2]);
+  printf("# burn-in, mcmc steps, n reps: %i %i %i \n", burn_in_steps, mcmc_steps, n_replicates);
   int n_temperatures = atoi(argv[next_arg+3]);
   printf("# n temperatures: %i \n", n_temperatures);
   next_arg += 4;
@@ -57,11 +60,11 @@ int main(int argc, char* argv[]){
   for(int j=0; j<n_temperatures; j++){
     temperatures[j] = atof(argv[next_arg + 5*j]);
     proposals[j].shape = argv[next_arg+1 + 5*j];
-    printf("%s \n", proposals[j].shape);
+    //   printf("%s \n", proposals[j].shape);
     proposals[j].W1 = atof(argv[next_arg+2 + 5*j]);
     proposals[j].W2 = atof(argv[next_arg+3 + 5*j]);
     proposals[j].p1 = atof(argv[next_arg+4 + 5*j]);
-    printf("#  T, Shape, W1,W2,p1:  %8.5f %12s %8.5f %8.5f %8.5f \n", 
+    printf("#  T, Proposal(shape,W1,W2,p1):  %8.5f %12s %8.5f %8.5f %8.5f \n", 
 	   temperatures[j], proposals[j].shape, proposals[j].W1, proposals[j].W2, proposals[j].p1);
   }
   next_arg += 5*n_temperatures;
@@ -78,26 +81,42 @@ int main(int argc, char* argv[]){
   g_rng = gsl_rng_alloc(rng_type);
 
   // *************** open output files *************
-  tvd_vs_gen_fstream = fopen("tvd_vs_gen", "w");
+  g_tvd_vs_gen_fstream = fopen("tvd_vs_gen", "w");
 
   //g_Ngrid_max += g_Ngrid_max % 2; // if odd, add one, to make it be even.
 
   // /*  ********** get bin boundaries ****************
-  const Binning_spec* the_bins = construct_binning_spec(n_bins, targ_1d);
- 
-  Ndim_histogram* targp = init_target_distribution(n_dimensions, n_bins, 1, the_bins);
-  g_targp = targp;
+  /* const Binning_spec* the_bins = //construct_binning_spec(n_bins, targ_1d); */
+  /*    construct_binning_spec(n_bins, targ_1d, -INFINITY, INFINITY); // Use for Ndim histograms */
+  /* const Binning_spec* two_bins = construct_binning_spec(2, targ_1d, -INFINITY, INFINITY); // bin for each orthant */
+  /* const Binning_spec* one_orthant_bins = construct_binning_spec(n_bins/2, targ_1d, 0, INFINITY);  */
+  /* const Binning_spec* one_dim_bins = construct_binning_spec(2*n_bins, targ_1d, -INFINITY, INFINITY); */
+
+  Binning_spec_set the_bin_set;
+  the_bin_set.ndim_bins =  construct_binning_spec(n_bins, targ_1d, -INFINITY, INFINITY); // Use for Ndim histograms
+  the_bin_set.onedim_bins = construct_binning_spec(2*n_bins, targ_1d, -INFINITY, INFINITY);
+  the_bin_set.orthants_bins = construct_binning_spec(2, targ_1d, -INFINITY, INFINITY); // bin for each orthant
+  the_bin_set.positive_bins =  construct_binning_spec(n_bins/2, targ_1d, 0, INFINITY); 
+
+  Ndim_histogram* targprobs_ndim = init_target_distribution(n_dimensions, n_bins, 1, the_bin_set.ndim_bins);
+  g_targprobs_ndim = targprobs_ndim;
+  Ndim_histogram* targprobs_1dim = init_target_distribution(1, 2*n_bins, 1, the_bin_set.onedim_bins);
+  g_targprobs_1dim = targprobs_1dim;
+  Ndim_histogram* targprobs_orthants = init_target_distribution(n_dimensions, 2, 1, the_bin_set.orthants_bins);
+  g_targprobs_orthants = targprobs_orthants;
+  Ndim_histogram* targprobs_one_orthant = init_target_distribution(n_dimensions, n_bins/2, 1, the_bin_set.positive_bins);
+  g_targprobs_one_orthant = targprobs_one_orthant;
+  printf("XXX\n");
   double tvd_sum = 0.0;
   double tvdsq_sum = 0.0;
 
-  for(int j=0; j<Nreps; j++){
+  for(int j=0; j<n_replicates; j++){
     State** states = (State**)malloc(n_temperatures*sizeof(State*));
     for(int i=0; i<n_temperatures; i++){
       states[i] = construct_state(n_dimensions, targ_1d);
     }
-    printf("after construct states \n");
-    Multi_T_chain* multi_T_chain = construct_multi_T_chain(n_temperatures, temperatures, proposals, states, the_bins);
-  
+    Multi_T_chain* multi_T_chain = construct_multi_T_chain(n_temperatures, temperatures, proposals, states, &the_bin_set);
+    printf("YYY\n");
   // ********** do burn-in ***********
     for(int n=0; n<=burn_in_steps; n++){
       multi_T_chain_within_T_mcmc_step(multi_T_chain);
@@ -112,17 +131,20 @@ int main(int argc, char* argv[]){
 
     tvd_sum += tvd;
     tvdsq_sum += tvd*tvd;
- 
+    //  printf("before free_multi...\n");
     free_multi_T_chain(multi_T_chain);
   } // end loop over reps
-
-  double tvd_avg = tvd_sum/Nreps;
-  double tvd_variance = tvdsq_sum/Nreps - tvd_avg*tvd_avg;
-  double tvd_stderr = sqrt(tvd_variance)/sqrt((double)Nreps);
-  //      printf("%4i  %8i  %10.6f +- %10.6f  %10.6f  %10.6f \n", k, n_jumps, tvd_avg, tvd_stderr, (double)Naccept_sum/(Naccept_sum+Nreject_sum), sqrt(sum_dsq/(Nreps*mcmc_steps)));
+  // printf("after reps loop...\n");
+  double tvd_avg = tvd_sum/n_replicates;
+  double tvd_variance = tvdsq_sum/n_replicates - tvd_avg*tvd_avg;
+  double tvd_stderr = sqrt(tvd_variance)/sqrt((double)n_replicates);
+  //      printf("%4i  %8i  %10.6f +- %10.6f  %10.6f  %10.6f \n", k, n_jumps, tvd_avg, tvd_stderr, (double)Naccept_sum/(Naccept_sum+Nreject_sum), sqrt(sum_dsq/(n_replicates*mcmc_steps)));
   //	printf("\n\n");
   fflush(stdout);
-  free_ndim_histogram(targp);
+  free_ndim_histogram(targprobs_ndim);
+ free_ndim_histogram(targprobs_1dim);
+ free_ndim_histogram(targprobs_orthants);
+ free_ndim_histogram(targprobs_one_orthant);
 } // end of main
 
 
@@ -169,9 +191,48 @@ double f_1dim(const Target_1dim* targ_1d, double x){
     f += exp(-0.5 * X*X) * peaks[i].weight/peaks[i].sigma;
     //   printf("i, x, X, position, sigma: %i %8.5f %8.5f %8.5f %8.5f \n", i, x, X, g_peaks[i].position, g_peaks[i].sigma);
   }
-  return f*ONEOVERSQRT2PI;
+  return f*ONEOVERSQRT2PI; // to normalize such that integral from -inf to +inf is sum(weights)
 }
 
+double integral_f_1dim(const Target_1dim* targ_1d, double x, double y){ // integral of f_1dim from x to y
+  Target_peak_1dim* peaks = targ_1d->peaks;
+  double integral = 0.0;
+  for(int i=0; i<targ_1d->n_modes; i++){
+    integral += peaks[i].weight*( gsl_cdf_gaussian_P(y-peaks[i].position, peaks[i].sigma) 
+				  - gsl_cdf_gaussian_P(x-peaks[i].position, peaks[i].sigma) );
+  }
+  // printf("A %g %g %g \n", x, y, integral);
+  return integral;
+}
+
+double find_bin_upper_edge(const Target_1dim* targ_1d, double xlo, double Q){
+  // returns x, the upper limit of integration such that integral from xlo to x of f_1dim
+  // is Q 
+  double epsilon = 1e-8;
+  double ll = -20.0;
+  double hh = 20.0;
+  double xlb = xlo; // current lower bound on result
+  double xub = INFINITY; // current upper bound on result
+  double xtry =  (xlo > ll)? xlo + Q/f_1dim(targ_1d, xlb): ll;
+  //  printf("xtry: %g \n", xtry);
+  double q_xtry = integral_f_1dim(targ_1d, xlo, xtry);
+  //      printf("B %g  %g %g \n", xtry, q_xtry, Q);
+
+	while(fabs(q_xtry - Q) > epsilon  || (xub - xlb) > epsilon){
+    //  q_xtry = integral_f_1dim(targ_1d, xlo, xtry);
+    //    printf("B %g  %g %g \n", xtry, q_xtry, Q);
+    if(q_xtry > Q){
+      xub = xtry;
+    }else{
+      xlb = xtry;
+    }
+    xtry = (xub < hh)? 0.5*(xlb + xub) : 0.5*(xlb + hh);
+    q_xtry = integral_f_1dim(targ_1d, xlo, xtry);
+    //    printf("C %g  %g %g \n", xlb, xub, xtry);
+  }
+	//  printf("xlo xlb xub xtry: %g %g %g %g \n", xlo, xlb, xub, xtry);
+  return xtry;
+}
 
 double drand(void){
   //  return (double)rand() / ((double)RAND_MAX + 1);
@@ -183,10 +244,8 @@ Ndim_histogram* init_target_distribution(int Ndim, int Ngrid_max, int normalize,
   targ_bin_probs->Ndim = Ndim;
   targ_bin_probs->Ngrid_max = Ngrid_max;
   targ_bin_probs->weights = construct_ndim_array_of_double(Ndim, Ngrid_max, 0.0);
-    printf("before set_...\n");
   targ_bin_probs->total_weight = 
     set_ndim_array_of_double_to_target(targ_bin_probs->weights, 1.0, g_targ_1d->peaks, bins);
-    printf("after set_...\n");
   //  print_ndim_array_of_double(targ_bin_probs->weights); exit(0);
   if(normalize){
     normalize_ndim_histogram(targ_bin_probs);
@@ -194,9 +253,19 @@ Ndim_histogram* init_target_distribution(int Ndim, int Ngrid_max, int normalize,
   return targ_bin_probs;
 }
 
-double total_variation_distance(const Ndim_histogram* targp, const Ndim_histogram* mcmc_out){
-  // both distributions must be normalized ahead of time
-   double tvd = 0.5 * sum_abs_difference_ndim_arrays_of_double(targp->weights, mcmc_out->weights); 
+/* double total_variation_distance(const Ndim_histogram* targp, const Ndim_histogram* mcmc_out){ */
+/*   // both distributions must be normalized ahead of time */
+/*    double tvd = 0.5 * sum_abs_difference_ndim_arrays_of_double(targp->weights, mcmc_out->weights);  */
+/*   return tvd; */
+/* } */
+
+double total_variation_distance(const Ndim_histogram* targprobs, const Ndim_histogram* hist){
+   Ndim_histogram* hist_copy = construct_copy_ndim_histogram(hist);
+  normalize_ndim_histogram(hist_copy);
+  double tvd =  0.5 * sum_abs_difference_ndim_arrays_of_double(targprobs->weights, hist_copy->weights); 
+  // total_variation_distance(targprobs, hist_copy);
+  //  fprintf(g_tvd_vs_gen_fstream, "%12.6g ", tvd);
+  free_ndim_histogram(hist_copy);
   return tvd;
 }
 

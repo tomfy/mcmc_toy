@@ -27,6 +27,14 @@ typedef struct
 
 typedef struct
 {
+  Binning_spec* ndim_bins;
+  Binning_spec* onedim_bins; // for n_dim > 2, do n_dim 2d histograms
+  Binning_spec* orthants_bins; // 1 bin for each orthant (i.e. n_bin = 2, each dimension if weights equal)
+  Binning_spec* positive_bins; //
+} Binning_spec_set;
+
+typedef struct
+{
   int Ndim;
   const Binning_spec* bins; // specifies where bin edges are (same for all dimensions)
   int Ngrid_max; // grid [0,Ngrid_max] each dimension
@@ -49,7 +57,7 @@ typedef struct {
 typedef struct
 {
   int n_dimensions;
-  int* ipoint; // ipoint[0] = x index [0,Ngrid_max], ipoint[1] = y index, etc.
+  //  int* ipoint; // ipoint[0] = x index [0,Ngrid_max], ipoint[1] = y index, etc.
   double* point; //
   double prob; // 
 } State;
@@ -73,6 +81,14 @@ typedef struct
   int n_jumps;
   Proposal proposal; // each T can have its own proposal
   Ndim_histogram* mcmc_out_hist;
+  Ndim_histogram** mcmc_out_1d_hists; // for n_dim > 2, do n_dim 2d histograms
+  Ndim_histogram* mcmc_out_orthants_hist; // 1 bin for each orthant (i.e. n_bin = 2, each dimension if weights equal)
+  Ndim_histogram* mcmc_out_reflected_hist; // pts reflected into all-positive orthant
+
+  Ndim_histogram* exact_draw_hist;
+  Ndim_histogram** exact_draw_1d_hists; // for n_dim > 2, do n_dim 2d histograms
+  Ndim_histogram* exact_draw_orthants_hist; // 1 bin for each orthant (i.e. n_bin = 2, each dimension if weights equal)
+  Ndim_histogram* exact_draw_reflected_hist; // pts reflected into all-positive orthant
 } Single_T_chain;
 
 typedef struct
@@ -95,21 +111,21 @@ State* construct_state(int n_dimensions, const Target_1dim* targ_1d);
 void free_state(State* s);
 
 // Single_T_chain
-Single_T_chain* construct_single_T_chain(double T, Proposal P, State* S, const Binning_spec* bins);
+Single_T_chain* construct_single_T_chain(double T, Proposal P, State* S, const Binning_spec_set* bins);
 State* single_T_chain_mcmc_step(Single_T_chain* chain);
 void single_T_chain_histogram_current_state(Single_T_chain* chain);
 void single_T_chain_output_tvd(Single_T_chain* chain);
 void free_single_T_chain(Single_T_chain* chain);
 // Multi_T_chain
-Multi_T_chain* construct_multi_T_chain(int n_temperatures, double* temperatures, Proposal* proposals, State** states, const Binning_spec* bins);
+Multi_T_chain* construct_multi_T_chain(int n_temperatures, double* temperatures, Proposal* proposals, State** states, const Binning_spec_set* bins);
 void multi_T_chain_within_T_mcmc_step(Multi_T_chain* multi_T_chain);
 void multi_T_chain_T_swap_mcmc_step(Multi_T_chain* multi_T_chain);
 void free_multi_T_chain(Multi_T_chain* chain);
 // Ndim_histogram
 Ndim_histogram* construct_ndim_histogram(int n_dim, const Binning_spec* bins); //(int Ndim, int Ngrid_max);
-Ndim_histogram* construct_copy_ndim_histogram(Ndim_histogram* A);
+Ndim_histogram* construct_copy_ndim_histogram(const Ndim_histogram* A);
 void normalize_ndim_histogram(Ndim_histogram* pdf);
-double total_variation_distance(const Ndim_histogram* targp, const Ndim_histogram* mcmc_out);
+// double total_variation_distance(const Ndim_histogram* targp, const Ndim_histogram* mcmc_out);
 //Ndim_histogram* init_target_distribution(int Ndim, int Ngrid_max, int normalize);
 
 void add_data_pt_to_ndim_histogram(Ndim_histogram* A, int n_dim, double* xs);
@@ -136,6 +152,10 @@ Ndim_array_of_int* construct_ndim_array_of_int(int Ndim, int Nsize, int init_val
 void normalize_targ_1dim(Target_1dim* targ);
 
 // Binning_spec
-Binning_spec* construct_binning_spec(int n_bins, const Target_1dim* targ_1d);
+Binning_spec* construct_binning_spec_old(int n_bins, const Target_1dim* targ_1d);
+Binning_spec* construct_binning_spec(int n_bins, const Target_1dim* targ_1d, double xlo, double xhi);
 int x_to_bin(const Binning_spec* bin_spec, double x);
 int* i_array_from_x_array(const Binning_spec* bins, int Ndim, double* x_array);
+
+
+void print_tvd(Ndim_histogram* hist, const Ndim_histogram* targprobs);

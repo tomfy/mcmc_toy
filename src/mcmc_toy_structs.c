@@ -16,7 +16,7 @@
 State* construct_state(int n_dimensions, const Target_1dim* targ_1d){ 
   State* the_state = (State*)malloc(sizeof(State));
   the_state->n_dimensions = n_dimensions;
-  the_state->ipoint = (int*)malloc(n_dimensions*sizeof(int));
+  //  the_state->ipoint = (int*)malloc(n_dimensions*sizeof(int));
   the_state->point = (double*)malloc(n_dimensions*sizeof(double));
   for(int i=0; i<n_dimensions; i++){
     //  the_state->ipoint[i] = (int)( drand() * (Ngrid_max+1) ); 
@@ -28,12 +28,12 @@ State* construct_state(int n_dimensions, const Target_1dim* targ_1d){
 }
 
 void free_state(State* s){
-  free(s->ipoint);
+  free(s->point);
   free(s);
 }
 
 // Single_T_chain
-Single_T_chain* construct_single_T_chain(double T, Proposal P, State* S, const Binning_spec* bins){
+Single_T_chain* construct_single_T_chain(double T, Proposal P, State* S, const Binning_spec_set* bins){
   Single_T_chain* single_T_chain = (Single_T_chain*)malloc(sizeof(Single_T_chain));
  
   single_T_chain->current_state = S;
@@ -43,8 +43,26 @@ Single_T_chain* construct_single_T_chain(double T, Proposal P, State* S, const B
   single_T_chain->dsq_sum = 0.0;
   single_T_chain->n_jumps = 1;
   //   single_T_chain->bins = bins;
-  single_T_chain->mcmc_out_hist = construct_ndim_histogram(S->n_dimensions, bins);
-  single_T_chain->mcmc_out_hist->bins = bins;
+  if(DO_TVD){
+    single_T_chain->mcmc_out_hist = construct_ndim_histogram(S->n_dimensions, bins->ndim_bins);
+    //  single_T_chain->mcmc_out_hist->bins = bins;
+    single_T_chain->mcmc_out_1d_hists = (Ndim_histogram**)malloc(S->n_dimensions*sizeof(Ndim_histogram*));
+    for(int i=0; i<S->n_dimensions; i++){
+      single_T_chain->mcmc_out_1d_hists[i] = construct_ndim_histogram(1, bins->onedim_bins);
+    }
+    single_T_chain->mcmc_out_orthants_hist = construct_ndim_histogram(S->n_dimensions, bins->orthants_bins);
+    single_T_chain->mcmc_out_reflected_hist = construct_ndim_histogram(S->n_dimensions, bins->positive_bins);
+    if(DO_EXACT){
+      single_T_chain->exact_draw_hist = construct_ndim_histogram(S->n_dimensions, bins->ndim_bins);
+   single_T_chain->exact_draw_1d_hists = (Ndim_histogram**)malloc(S->n_dimensions*sizeof(Ndim_histogram*));
+    for(int i=0; i<S->n_dimensions; i++){
+      single_T_chain->exact_draw_1d_hists[i] = construct_ndim_histogram(1, bins->onedim_bins);
+    }
+    single_T_chain->exact_draw_orthants_hist = construct_ndim_histogram(S->n_dimensions, bins->orthants_bins);
+    single_T_chain->exact_draw_reflected_hist = construct_ndim_histogram(S->n_dimensions, bins->positive_bins);
+      //   single_T_chain->exact_draw_hist->bins = bins;
+    }
+  }
   return single_T_chain;
 }
 
@@ -95,30 +113,96 @@ void single_T_chain_histogram_current_state(Single_T_chain* chain){
   int n_dim = the_state->n_dimensions;
   if(chain->mcmc_out_hist != NULL){
     add_data_pt_to_ndim_histogram(chain->mcmc_out_hist, n_dim, the_state->point);
+    add_data_pt_to_ndim_histogram(chain->mcmc_out_orthants_hist, n_dim, the_state->point);
+    double* reflected_point = (double*)malloc(n_dim*sizeof(double));
+    for(int i=0; i<n_dim; i++){
+      reflected_point[i] = fabs(the_state->point[i]);
+    }
+    add_data_pt_to_ndim_histogram(chain->mcmc_out_reflected_hist, n_dim, reflected_point);
+    free(reflected_point);
+    for(int i=0; i<n_dim; i++){
+      add_data_pt_to_ndim_histogram(chain->mcmc_out_1d_hists[i], 1, the_state->point+i);
+    }
+  }
+}
+
+void single_T_chain_histogram_exact_draw(Single_T_chain* chain, double* exact_draw){
+  State* the_state = chain->current_state;
+  int n_dim = the_state->n_dimensions;
+  if(chain->exact_draw_hist != NULL){
+    add_data_pt_to_ndim_histogram(chain->exact_draw_hist, n_dim, exact_draw);
+    add_data_pt_to_ndim_histogram(chain->exact_draw_orthants_hist, n_dim, exact_draw);
+    double* reflected_point = (double*)malloc(n_dim*sizeof(double));
+    for(int i=0; i<n_dim; i++){
+      reflected_point[i] = fabs(exact_draw[i]);
+    }
+    add_data_pt_to_ndim_histogram(chain->exact_draw_reflected_hist, n_dim, reflected_point);
+    free(reflected_point);
+    for(int i=0; i<n_dim; i++){
+      add_data_pt_to_ndim_histogram(chain->exact_draw_1d_hists[i], 1, exact_draw+i);
+    }
   }
 }
 
 void single_T_chain_output_tvd(Single_T_chain* chain){
-  Ndim_histogram* hist_copy = construct_copy_ndim_histogram(chain->mcmc_out_hist);
-  normalize_ndim_histogram(hist_copy);
-  double tvd = total_variation_distance(g_targp, hist_copy);
-  fprintf(tvd_vs_gen_fstream, "%8i %12.6g\n", chain->generation, tvd);
-  free_ndim_histogram(hist_copy);
+  fprintf(g_tvd_vs_gen_fstream, "%8i  ", chain->generation); 
+  if(chain->mcmc_out_hist != NULL){
+    double tvd = total_variation_distance(g_targprobs_ndim, chain->mcmc_out_hist);
+    fprintf(g_tvd_vs_gen_fstream, "%12.6g ", tvd);
+    tvd = total_variation_distance(g_targprobs_orthants, chain->mcmc_out_orthants_hist);
+    fprintf(g_tvd_vs_gen_fstream, "%12.6g ", tvd);
+    tvd = total_variation_distance(g_targprobs_one_orthant, chain->mcmc_out_reflected_hist);
+    fprintf(g_tvd_vs_gen_fstream, "%12.6g ", tvd);
+    for(int i=0; i<chain->current_state->n_dimensions; i++){
+      //   printf("g_targprobs_1dim, Ndim: %i \n", g_targprobs_1dim->Ndim);
+      tvd = total_variation_distance(g_targprobs_1dim, chain->mcmc_out_1d_hists[i]);
+      fprintf(g_tvd_vs_gen_fstream, "%12.6g ", tvd);
+    }
+
+    /* Ndim_histogram* hist_copy = construct_copy_ndim_histogram(chain->mcmc_out_hist); */
+    /* normalize_ndim_histogram(hist_copy); */
+    /* tvd = total_variation_distance(g_targp, hist_copy); */
+    /* fprintf(g_tvd_vs_gen_fstream, "%12.6g ", tvd); */
+    /* free_ndim_histogram(hist_copy); */
+  }
+  if(chain->exact_draw_hist != NULL){
+    double tvd = total_variation_distance(g_targprobs_ndim, chain->exact_draw_hist);
+    fprintf(g_tvd_vs_gen_fstream, "%12.6g ", tvd);
+    tvd = total_variation_distance(g_targprobs_orthants, chain->exact_draw_orthants_hist);
+    fprintf(g_tvd_vs_gen_fstream, "%12.6g ", tvd);
+    tvd = total_variation_distance(g_targprobs_one_orthant, chain->exact_draw_reflected_hist);
+    fprintf(g_tvd_vs_gen_fstream, "%12.6g ", tvd);
+    for(int i=0; i<chain->current_state->n_dimensions; i++){
+      //   printf("g_targprobs_1dim, Ndim: %i \n", g_targprobs_1dim->Ndim);
+      tvd = total_variation_distance(g_targprobs_1dim, chain->exact_draw_1d_hists[i]);
+      fprintf(g_tvd_vs_gen_fstream, "%12.6g ", tvd);
+    }
+    /* Ndim_histogram* hist_copy = construct_copy_ndim_histogram(chain->exact_draw_hist); */
+    /* normalize_ndim_histogram(hist_copy); */
+    /* double tvd = total_variation_distance(g_targp, hist_copy); */
+    /* fprintf(g_tvd_vs_gen_fstream, "%12.6g  ", tvd); */
+    /* free_ndim_histogram(hist_copy); */
+  }
+  fprintf(g_tvd_vs_gen_fstream, "\n");
 }
+
+
 
 void free_single_T_chain(Single_T_chain* chain){
   free_state(chain->current_state);
   free_ndim_histogram(chain->mcmc_out_hist);
+  free_ndim_histogram(chain->exact_draw_hist);
   free(chain);
   
 }
 
 // Multi_T_chain
-Multi_T_chain* construct_multi_T_chain(int n_temperatures, double* temperatures, Proposal* proposals, State** states, const Binning_spec* bins){
+Multi_T_chain* construct_multi_T_chain(int n_temperatures, double* temperatures, Proposal* proposals, State** states, const Binning_spec_set* bins){
   Multi_T_chain* multi_T_chain = (Multi_T_chain*)malloc(sizeof(Multi_T_chain));
   multi_T_chain->n_temperatures = n_temperatures;
   multi_T_chain->coupled_chains = (Single_T_chain**)malloc(n_temperatures*sizeof(Single_T_chain*));
   for(int i=0; i<n_temperatures; i++){
+    printf("i: %i;  before construct single T chain. \n", i);
     multi_T_chain->coupled_chains[i] = construct_single_T_chain(temperatures[i], proposals[i], states[i], bins);
   }
   return multi_T_chain;
@@ -129,19 +213,32 @@ void multi_T_chain_within_T_mcmc_step(Multi_T_chain* multi_T_chain){
   for(int i=0; i<multi_T_chain->n_temperatures; i++){
     Single_T_chain* chain = multi_T_chain->coupled_chains[i];
     single_T_chain_mcmc_step( chain );
-    if(OUTPUT_SAMPLES){
-      printf("%6i ", chain->generation); print_array_of_double(n_dim, chain->current_state->point); 
-      double* xs = draw_ndim(n_dim, g_targ_1d);
-      printf("  "); print_array_of_double(n_dim, xs);
-      printf("\n");
-      free(xs);
+    double* exact_xs = NULL;
+    if(DO_EXACT){
+      exact_xs = draw_ndim(n_dim, g_targ_1d);
     }
-    single_T_chain_histogram_current_state(multi_T_chain->coupled_chains[i]);
-    if(OUTPUT_TVD_VS_N){
-      if(chain->generation%TVD_EVERY == 0){	 
-	single_T_chain_output_tvd(chain);
+    if(OUTPUT_SAMPLES){
+      printf("%6i  %8.5f %12.8g ", chain->generation, chain->temperature, chain->current_state->prob); 
+      print_array_of_double(n_dim, chain->current_state->point); printf(" ");
+      print_array_of_int(n_dim, i_array_from_x_array(chain->mcmc_out_hist->bins, n_dim, chain->current_state->point));
+      if(DO_EXACT){ print_array_of_double(n_dim, exact_xs); 
+	print_array_of_int(n_dim, i_array_from_x_array(chain->exact_draw_hist->bins, n_dim, exact_xs));
+      }
+
+      printf("\n");
+    }
+   
+    if(DO_TVD){
+      single_T_chain_histogram_current_state(multi_T_chain->coupled_chains[i]);
+      if(DO_EXACT){ 
+	single_T_chain_histogram_exact_draw(multi_T_chain->coupled_chains[i], exact_xs);
+	//add_data_pt_to_ndim_histogram(chain->exact_draw_hist, n_dim,  exact_xs); }
+	if(chain->generation%TVD_EVERY == 0){	 
+	  single_T_chain_output_tvd(chain);
+	}
       }
     }
+    free(exact_xs);
   } 
 }
 
@@ -151,7 +248,6 @@ void free_multi_T_chain(Multi_T_chain* chain){
   }
   free(chain);
 }
-
 
 // Ndim Histogram
 Ndim_histogram* construct_ndim_histogram
@@ -163,10 +259,11 @@ Ndim_histogram* construct_ndim_histogram
   histogram->Ngrid_max = bins->n_bins;
   histogram->total_weight = 0;
   histogram->weights = construct_ndim_array_of_double(n_dim, bins->n_bins, 0.0);
+  histogram->bins = bins;
   return histogram;
 }
 
-Ndim_histogram* construct_copy_ndim_histogram(Ndim_histogram* A){
+Ndim_histogram* construct_copy_ndim_histogram(const Ndim_histogram* A){
   Ndim_histogram* histogram = (Ndim_histogram*)malloc(sizeof(Ndim_histogram));
   histogram->Ndim = A->Ndim;
   histogram->Ngrid_max = A->Ngrid_max;
@@ -326,8 +423,8 @@ double sum_ndim_array_of_double(Ndim_array_of_double* array_struct){
 double sum_abs_difference_ndim_arrays_of_double(const Ndim_array_of_double* a1, const Ndim_array_of_double* a2){
   int Ndim = a1->Ndim;
   int Nsize = a1->Nsize;
-  //  printf("a1, a2->Ndim: %i %i \n", a1->Ndim, a2->Ndim);
-  // printf("a1, a2->Nsize: %i %i \n", a1->Nsize, a2->Nsize);
+    printf("a1, a2->Ndim: %i %i \n", a1->Ndim, a2->Ndim);
+   printf("a1, a2->Nsize: %i %i \n", a1->Nsize, a2->Nsize);
   assert(a2->Ndim == Ndim   &&  a2->Nsize == Nsize);
   double sum_abs_difference = 0.0;
   if(Ndim == 1){
@@ -407,9 +504,31 @@ void normalize_targ_1dim(Target_1dim* targ){
   }
 }
 
-Binning_spec* construct_binning_spec(int n_bins, const Target_1dim* targ_1d){
+// more general version - can be used with > 2 peaks, with non-equal sigmas and weights
+Binning_spec* construct_binning_spec(int n_bins, const Target_1dim* targ_1d, double xlo, double xhi){ 
   double* bin_boundaries = (double*)malloc((n_bins+1)*sizeof(double));
-  printf("n_bins: %i \n", n_bins);
+  int n_modes = targ_1d->n_modes;
+  Target_peak_1dim* peaks = targ_1d->peaks;
+  double integral = integral_f_1dim(targ_1d, xlo, xhi);
+  double p_bin = integral/(double)n_bins;
+  //  printf("integral: %g, p_bin: %g \n", integral, p_bin);
+  bin_boundaries[0] = xlo;
+  for(int i=1; i<n_bins; i++){   
+    bin_boundaries[i] = find_bin_upper_edge( targ_1d, xlo, i*p_bin);
+  }
+  bin_boundaries[n_bins] = xhi;
+  Binning_spec* binning_spec = (Binning_spec*)malloc(sizeof(Binning_spec));
+  binning_spec->n_bins = n_bins;
+  binning_spec->x_lo = xlo;
+  binning_spec->x_hi = xhi;
+  binning_spec->bin_edges = bin_boundaries;
+  //  print_array_of_double(n_bins+1, bin_boundaries); printf("\n");
+  return binning_spec;
+}
+
+Binning_spec* construct_binning_spec_old(int n_bins, const Target_1dim* targ_1d){
+  double* bin_boundaries = (double*)malloc((n_bins+1)*sizeof(double));
+  // printf("n_bins: %i \n", n_bins);
   int n_modes = targ_1d->n_modes;
   Target_peak_1dim* peaks = targ_1d->peaks;
   // assume 2 peaks with same sigma and weight
@@ -423,7 +542,7 @@ Binning_spec* construct_binning_spec(int n_bins, const Target_1dim* targ_1d){
   double sig = peaks[0].sigma;
   double weight = peaks[0].weight;
   double peak1_prob = gsl_cdf_gaussian_P(xmid-position,sig) - 0; 
-  double pinc = peak1_prob/(n_bins-1);
+  double pinc = peak1_prob/(n_bins/2); // (n_bins-1);
   double p = pinc;
   bin_boundaries[0] = -INFINITY;
   bin_boundaries[n_bins] = INFINITY;
@@ -433,9 +552,9 @@ Binning_spec* construct_binning_spec(int n_bins, const Target_1dim* targ_1d){
     p_this_bin = gsl_cdf_gaussian_P(bin_boundaries[i]-position, sig)
       - gsl_cdf_gaussian_P(bin_boundaries[i-1]-position, sig); 
     //  printf("# %6i  %12.7g  %12.7g  %12.7g  %12.7g\n", i, bin_boundaries[i], p, p_this_bin, f_1dim(bin_boundaries[i]));
-    printf("# %6i  %12.7g  %12.7g  %12.7g %12.7g  %12.7g\n", i-1, bin_boundaries[i-1], bin_boundaries[i], 
-	   p+peak1_prob, p_this_bin, f_1dim(targ_1d, bin_boundaries[i]) );
-    p += 2*pinc;
+    printf("# %6i  %12.7g  %12.7g  %12.7g  %12.7g\n", i-1, bin_boundaries[i-1], bin_boundaries[i], 
+	    p_this_bin, f_1dim(targ_1d, bin_boundaries[i]) );
+    p += pinc; // 2*pinc;
   }
   bin_boundaries[Nmiddle] = xmid;
   /* p_this_bin =  gsl_cdf_gaussian_P(bin_boundaries[Nmiddle]-position, sig)  */
@@ -448,8 +567,8 @@ Binning_spec* construct_binning_spec(int n_bins, const Target_1dim* targ_1d){
   double peak2_prob = 1.0 - gsl_cdf_gaussian_P(xmid-position,sig); 
   // printf("peak1,2 probs: %12.5g  %12.5g \n", peak1_prob, peak2_prob);
   // printf("peak2 prob: %12.7g \n",  peak2_prob);
-  pinc = peak2_prob/(n_bins-1);
-  p = 2*pinc;
+  pinc = peak2_prob/(n_bins/2); // (n_bins-1);
+  p = pinc; // 2*pinc;
   for(int i=Nmiddle+1; i<n_bins; i++){
     double p2mid = 
       bin_boundaries[i] = gsl_cdf_gaussian_Pinv(p + gsl_cdf_gaussian_P(xmid-position, sig), sig) + position;
@@ -457,7 +576,7 @@ Binning_spec* construct_binning_spec(int n_bins, const Target_1dim* targ_1d){
     p_this_bin -=  gsl_cdf_gaussian_P(bin_boundaries[i-1]-position, sig) ;
     printf("# %6i  %12.7g  %12.7g  %12.7g %12.7g  %12.7g\n", i-1, bin_boundaries[i-1], bin_boundaries[i], 
 	   p+peak1_prob, p_this_bin, f_1dim(targ_1d, bin_boundaries[i]) );
-    p += 2*pinc;
+    p += pinc; // 2*pinc;
   }
   double p_top_bin = 1.0 - gsl_cdf_gaussian_P(bin_boundaries[n_bins-1]-position, sig);
   printf("# %6i  %12.7g  %12.7g %12.7g %12.7g  %12.7g\n", n_bins-1, bin_boundaries[n_bins-1], INFINITY, p+peak1_prob-pinc, p_top_bin, 0.0 );
@@ -469,44 +588,21 @@ Binning_spec* construct_binning_spec(int n_bins, const Target_1dim* targ_1d){
   return binning_spec;
 }
 
-int x_to_bin(const Binning_spec* bin_spec, double x){
-  //  printf("top of x_to_bin. x: %g\n", x);
-  //  printf("n_bins, x_lo, x_hi: %i  %g  %g\n", bin_spec->n_bins, bin_spec->x_lo, bin_spec->x_hi);
-  int r1;
+int x_to_bin(const Binning_spec* bin_spec, double x){ // 1-dim
   int n_bins = bin_spec->n_bins;
   double* edges = bin_spec->bin_edges;
-  if(1){
-    if(x < edges[0]){ r1 = -1; } //return -1; }
-    else if(x < edges[n_bins]){
-      for(int i=1; i<=n_bins; i++){
-  	//   printf("i, x, bin_edges: %i %g %g \n", i, x, bin_spec->bin_edges[i]);
-  	if(x < bin_spec->bin_edges[i]){ r1 = i-1; break; } //return i; }
-      }
+  int min_bin = 0;
+  int max_bin = n_bins-1;
+  int try_bin = max_bin/2;
+  while(max_bin > min_bin){
+    if(x < edges[try_bin+1]){
+      max_bin = try_bin;
+    }else{
+      min_bin = try_bin+1;
     }
-    //   else if(x <= bin_spec->x_hi){ r1 = bin_spec->n_bins-1; } // return bin_spec->n_bins-1; }
-    else if(x >= edges[n_bins]){ r1 = -2; } //return -2; }
-    else{
-      assert(0); // shouldn't get here
-    }
-  }
-  //  assert(0);
-  if(1){
-    int min_bin = 0;
-    int max_bin = n_bins-1;
-
-    int try_bin = max_bin/2;
-    while(max_bin > min_bin){
-      if(x < edges[try_bin+1]){
-	max_bin = try_bin;
-      }else{
-	min_bin = try_bin+1;
-      }
-      try_bin = (min_bin + max_bin)/2;
-    }  
-    //  printf("in x_to_bin. x, r1, r2: %g %i %i \n", x, r1, min_bin); 
-    assert (r1 == min_bin);
-  }
-  return r1; //min_bin;
+    try_bin = (min_bin + max_bin)/2;
+  }  
+  return min_bin;
 }
 
 int* i_array_from_x_array(const Binning_spec* bins, int Ndim, double* x_array){
