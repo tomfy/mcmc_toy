@@ -1,0 +1,5 @@
+corr: corr.o
+	gcc -std=c99 -O3 -o corr corr.o -lm -lgsl -lgslcblas
+corr.o: corr.c
+	gcc -std=c99 -c corr.c -O3 
+
