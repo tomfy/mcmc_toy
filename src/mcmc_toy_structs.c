@@ -9,10 +9,9 @@
 #include "mcmc_toy_structs.h"
 #include "mcmc_toy.h"
 
-
 // these are the functions that go with the structs in structs.h
 
-// construct a state to a point chosen u.a.r. among the (Ngrid_max+1)^n_dimensions points
+// construct a state
 State* construct_state(int n_dimensions, const Target_1dim* targ_1d){ 
   State* the_state = (State*)malloc(sizeof(State));
   the_state->n_dimensions = n_dimensions;
@@ -202,7 +201,7 @@ Multi_T_chain* construct_multi_T_chain(int n_temperatures, double* temperatures,
   multi_T_chain->n_temperatures = n_temperatures;
   multi_T_chain->coupled_chains = (Single_T_chain**)malloc(n_temperatures*sizeof(Single_T_chain*));
   for(int i=0; i<n_temperatures; i++){
-    printf("i: %i;  before construct single T chain. \n", i);
+    //  printf("i: %i;  before construct single T chain. \n", i);
     multi_T_chain->coupled_chains[i] = construct_single_T_chain(temperatures[i], proposals[i], states[i], bins);
   }
   return multi_T_chain;
@@ -218,11 +217,12 @@ void multi_T_chain_within_T_mcmc_step(Multi_T_chain* multi_T_chain){
       exact_xs = draw_ndim(n_dim, g_targ_1d);
     }
     if(OUTPUT_SAMPLES){
-      printf("%6i  %8.5f %12.8g ", chain->generation, chain->temperature, chain->current_state->prob); 
+      printf("%6i  %11.8f %11.8g ", chain->generation, chain->temperature, chain->current_state->prob); 
       print_array_of_double(n_dim, chain->current_state->point); printf(" ");
-      print_array_of_int(n_dim, i_array_from_x_array(chain->mcmc_out_hist->bins, n_dim, chain->current_state->point));
-      if(DO_EXACT){ print_array_of_double(n_dim, exact_xs); 
-	print_array_of_int(n_dim, i_array_from_x_array(chain->exact_draw_hist->bins, n_dim, exact_xs));
+      //    print_array_of_int(n_dim, i_array_from_x_array(chain->mcmc_out_hist->bins, n_dim, chain->current_state->point));
+      if(DO_EXACT){ 
+	print_array_of_double(n_dim, exact_xs); 
+	//	print_array_of_int(n_dim, i_array_from_x_array(chain->exact_draw_hist->bins, n_dim, exact_xs));
       }
 
       printf("\n");
@@ -341,8 +341,8 @@ void free_ndim_array_of_double(Ndim_array_of_double* A){
 }
 
 double set_ndim_array_of_double_to_target(Ndim_array_of_double* array_struct,
-					  double outer_value, Target_peak_1dim* peaks, const Binning_spec* bins){
- 
+					  double outer_value, const Target_1dim* targ_1d, const Binning_spec* bins){
+  Target_peak_1dim* peaks = targ_1d->peaks;
   int Ndim = array_struct->Ndim;
   int Nsize = array_struct->Nsize;
   assert (Nsize == bins->n_bins);
@@ -352,10 +352,12 @@ double set_ndim_array_of_double_to_target(Ndim_array_of_double* array_struct,
     for(int i=0; i<Nsize; i++){
       //double x = Xmin + (double)i/(double)(Nsize-1)*(Xmax-Xmin);
       //    printf("%8i %8.5g  %8.5g \n", i, outer_value, function(x));
-      double bin_prob = gsl_cdf_gaussian_P(bin_boundaries[i+1]-peaks[0].position, peaks[0].sigma) 
-	- gsl_cdf_gaussian_P(bin_boundaries[i]-peaks[0].position, peaks[0].sigma)
-	+ gsl_cdf_gaussian_P(bin_boundaries[i+1]-peaks[1].position, peaks[1].sigma) 
-	- gsl_cdf_gaussian_P(bin_boundaries[i]-peaks[1].position, peaks[1].sigma);
+      double bin_prob = 0.0;
+      for(int j=0; j<targ_1d->n_modes; j++){
+	bin_prob += 
+	  peaks[j].weight * (gsl_cdf_gaussian_P(bin_boundaries[i+1]-peaks[j].position, peaks[j].sigma) 
+			   - gsl_cdf_gaussian_P(bin_boundaries[i]-peaks[j].position, peaks[j].sigma) );
+  };
       //printf("i, binboundaries[i],[i+1], bin_prob: %i %12.5g  %12.5g  %12.5g \n", i, bin_boundaries[i], bin_boundaries[i+1], bin_prob);
 
       double innermost_value =  outer_value*bin_prob;
@@ -366,16 +368,24 @@ double set_ndim_array_of_double_to_target(Ndim_array_of_double* array_struct,
   }else{    
     //    printf("Ndim: %i \n", Ndim);
     for(int i=0; i<Nsize; i++){  
-      double bin_prob = gsl_cdf_gaussian_P(bin_boundaries[i+1]-peaks[0].position, peaks[0].sigma) 
-	- gsl_cdf_gaussian_P(bin_boundaries[i]-peaks[0].position, peaks[0].sigma)
-	+ gsl_cdf_gaussian_P(bin_boundaries[i+1]-peaks[1].position, peaks[1].sigma) 
-	- gsl_cdf_gaussian_P(bin_boundaries[i]-peaks[1].position, peaks[1].sigma);
+      double bin_prob = 0.0; 
+for(int j=0; j<targ_1d->n_modes; j++){
+	bin_prob += 
+	peaks[j].weight * (gsl_cdf_gaussian_P(bin_boundaries[i+1]-peaks[j].position, peaks[j].sigma) 
+			   - gsl_cdf_gaussian_P(bin_boundaries[i]-peaks[j].position, peaks[j].sigma) );
+  };
+
+
+/* gsl_cdf_gaussian_P(bin_boundaries[i+1]-peaks[0].position, peaks[0].sigma)  */
+/* 	- gsl_cdf_gaussian_P(bin_boundaries[i]-peaks[0].position, peaks[0].sigma) */
+/* 	+ gsl_cdf_gaussian_P(bin_boundaries[i+1]-peaks[1].position, peaks[1].sigma)  */
+/* 	- gsl_cdf_gaussian_P(bin_boundaries[i]-peaks[1].position, peaks[1].sigma); */
       // double bin_prob = gsl_cdf_gaussian_P(bin_boundaries[i+1], peaks[0].sigma) - gsl_cdf_gaussian_P(bin_boundaries[i], peaks[0].sigma)
       //	+ gsl_cdf_gaussian_P(bin_boundaries[i+1], peaks[1].sigma) - gsl_cdf_gaussian_P(bin_boundaries[i], peaks[1].sigma);
       //qprintf("i, binboundaries[i],[i+1], bin_prob: %i %12.5g  %12.5g  %12.5g \n", i, bin_boundaries[i], bin_boundaries[i+1], bin_prob);
 
       Ndim_array_of_double* inner_array_struct = ((Ndim_array_of_double**)array_struct->array)[i];
-      sum +=  set_ndim_array_of_double_to_target(inner_array_struct, outer_value*bin_prob, peaks, bins);
+      sum +=  set_ndim_array_of_double_to_target(inner_array_struct, outer_value*bin_prob, targ_1d, bins);
     }
   }
   return sum;
@@ -423,14 +433,15 @@ double sum_ndim_array_of_double(Ndim_array_of_double* array_struct){
 double sum_abs_difference_ndim_arrays_of_double(const Ndim_array_of_double* a1, const Ndim_array_of_double* a2){
   int Ndim = a1->Ndim;
   int Nsize = a1->Nsize;
-    printf("a1, a2->Ndim: %i %i \n", a1->Ndim, a2->Ndim);
-   printf("a1, a2->Nsize: %i %i \n", a1->Nsize, a2->Nsize);
+  //  printf("a1, a2->Ndim: %i %i \n", a1->Ndim, a2->Ndim);
+  //  printf("a1, a2->Nsize: %i %i \n", a1->Nsize, a2->Nsize);
   assert(a2->Ndim == Ndim   &&  a2->Nsize == Nsize);
   double sum_abs_difference = 0.0;
   if(Ndim == 1){
     double* A1 = (double*)a1->array;
     double* A2 = (double*)a2->array;
     for(int i=0; i<Nsize; i++){
+      //   printf("bin probs, targ, data: %i %g %g \n", i, A1[i], A2[i]);
       sum_abs_difference += fabs(A1[i] - A2[i]);
     }
     //   return sum_abs_difference; 
@@ -494,7 +505,30 @@ Ndim_array_of_int* construct_ndim_array_of_int(int Ndim, int Nsize, int init_val
 }
 
 // target 1dim
-void normalize_targ_1dim(Target_1dim* targ){
+Target_1dim* construct_target_1dim(int n_peaks, Target_peak_1dim* peaks){
+  Target_1dim* targ_1d = (Target_1dim*)malloc(sizeof(Target_1dim));
+  targ_1d->n_modes = n_peaks;
+  targ_1d->peaks = peaks; 
+  normalize_target_1dim(targ_1d);
+  double mean = 0.0;
+  double avg_musq = 0.0;
+  double sum_sigmasq = 0.0;
+  for (int i=0; i<n_peaks; i++){
+    double w_i = peaks[i].weight;
+    double mu_i = peaks[i].position;
+    double sigma_i = peaks[i].sigma;
+    mean +=  w_i * mu_i;
+    avg_musq += w_i * mu_i * mu_i;
+    sum_sigmasq += w_i * sigma_i * sigma_i;
+  }
+  double variance = (avg_musq - mean*mean) + sum_sigmasq;
+  targ_1d->mean = mean;
+  targ_1d->variance = variance;
+  //  printf("mean, variance: %g %g \n", mean, variance);
+  return targ_1d;
+} 
+
+void normalize_target_1dim(Target_1dim* targ){
   double w_sum = 0.0;
   for(int i = 0; i<targ->n_modes; i++){
     w_sum += targ->peaks[i].weight;
@@ -522,7 +556,7 @@ Binning_spec* construct_binning_spec(int n_bins, const Target_1dim* targ_1d, dou
   binning_spec->x_lo = xlo;
   binning_spec->x_hi = xhi;
   binning_spec->bin_edges = bin_boundaries;
-  //  print_array_of_double(n_bins+1, bin_boundaries); printf("\n");
+  //   print_array_of_double(n_bins+1, bin_boundaries); printf("\n");
   return binning_spec;
 }
 
@@ -588,6 +622,13 @@ Binning_spec* construct_binning_spec_old(int n_bins, const Target_1dim* targ_1d)
   return binning_spec;
 }
 
+void print_binning_spec(const Binning_spec* bins){
+  printf("Binning specification: n_bins %i\n", bins->n_bins);
+  for(int i=0; i<=bins->n_bins; i++){
+    printf("%10.6g \n", bins->bin_edges[i]);
+  } printf("\n");
+}
+
 int x_to_bin(const Binning_spec* bin_spec, double x){ // 1-dim
   int n_bins = bin_spec->n_bins;
   double* edges = bin_spec->bin_edges;
@@ -614,7 +655,8 @@ int* i_array_from_x_array(const Binning_spec* bins, int Ndim, double* x_array){
     //  printf("AFTER\n");
   }
   return i_array;
-}
+} 
+
 
 // obsolete/unused stuff ...
 

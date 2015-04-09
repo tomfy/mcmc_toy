@@ -51,6 +51,8 @@ typedef struct {
 typedef struct {
   int n_modes;
   Target_peak_1dim* peaks;
+  double mean;
+  double variance;
 } Target_1dim;
 
 // mcmc specific structs
@@ -138,8 +140,10 @@ double* get_pointer_to_element(Ndim_array_of_double* A, int* index_array);
 double sum_ndim_array_of_double(Ndim_array_of_double* array_struct);
 double set_ndim_array_of_double_with_function(Ndim_array_of_double* array_struct,
 						     double outer_value, double_func_ptr function);
+/* double set_ndim_array_of_double_to_target(Ndim_array_of_double* array_struct, */
+/* 					  double outer_value, Target_peak_1dim* peaks, const Binning_spec* bins); */
 double set_ndim_array_of_double_to_target(Ndim_array_of_double* array_struct,
-					  double outer_value, Target_peak_1dim* peaks, const Binning_spec* bins);
+					  double outer_value, const Target_1dim* targ_1d, const Binning_spec* bins);
 void multiply_ndim_array_of_double_by_scalar(Ndim_array_of_double* array_struct, double multiplier);
 double sum_abs_difference_ndim_arrays_of_double(const Ndim_array_of_double* a1, const Ndim_array_of_double* a2);
 void print_ndim_array_of_double(const Ndim_array_of_double* A);
@@ -149,11 +153,14 @@ void free_ndim_array_of_double(Ndim_array_of_double* A);
 Ndim_array_of_int* construct_ndim_array_of_int(int Ndim, int Nsize, int init_value);
 
 // Target_1dim 
-void normalize_targ_1dim(Target_1dim* targ);
+Target_1dim* construct_target_1dim(int n_peaks, Target_peak_1dim* peaks);
+void normalize_target_1dim(Target_1dim* targ);
 
 // Binning_spec
 Binning_spec* construct_binning_spec_old(int n_bins, const Target_1dim* targ_1d);
 Binning_spec* construct_binning_spec(int n_bins, const Target_1dim* targ_1d, double xlo, double xhi);
+void print_binning_spec(const Binning_spec* bins);
+
 int x_to_bin(const Binning_spec* bin_spec, double x);
 int* i_array_from_x_array(const Binning_spec* bins, int Ndim, double* x_array);
 

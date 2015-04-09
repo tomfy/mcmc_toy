@@ -18,7 +18,7 @@ extern FILE* g_tvd_vs_gen_fstream;
 #define UNDERFLOW_ID (-1)
 #define OVERFLOW_ID (-2)
 // #define OUTPUT_TVD_VS_N (1)
-#define TVD_EVERY (5000)
+#define TVD_EVERY (1000)
 #define DO_EXACT (1)
 #define DO_TVD (1)
 

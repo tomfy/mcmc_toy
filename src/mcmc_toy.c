@@ -31,19 +31,23 @@ int main(int argc, char* argv[]){
   int n_dimensions = atoi(argv[1]);
   printf("# n_dimensions: %i \n", n_dimensions);
 
- Target_1dim* targ_1d = (Target_1dim*)malloc(sizeof(Target_1dim));
-  targ_1d->n_modes = atoi(argv[2]);
-  printf("# n_modes: %i \n", targ_1d->n_modes);
+  //  Target_1dim* targ_1d = (Target_1dim*)malloc(sizeof(Target_1dim));
+  //  targ_1d->n_modes = 
+    int n_peaks = atoi(argv[2]);
+  printf("# n_peaks: %i \n", n_peaks);
   //Target_peak_1dim* 
-  Target_peak_1dim* peaks = (Target_peak_1dim*) malloc(targ_1d->n_modes*sizeof(Target_peak_1dim));
-  for(int j=0; j<targ_1d->n_modes; j++){
+  Target_peak_1dim* peaks = (Target_peak_1dim*) malloc(n_peaks*sizeof(Target_peak_1dim));
+  for(int j=0; j<n_peaks; j++){
     peaks[j].position = atof(argv[3 + 3*j]);
     peaks[j].sigma = atof(argv[4 + 3*j]);
     peaks[j].weight = atof(argv[5 + 3*j]);
     printf("# peak %i; position,sigma,weight: %8.5f %8.5f %8.5f \n",j, peaks[j].position, peaks[j].sigma, peaks[j].weight);
   }
-  targ_1d->peaks = peaks; 
-  normalize_targ_1dim(targ_1d);
+  //  targ_1d->peaks = peaks; 
+  //  normalize_target_1dim(targ_1d);
+
+  Target_1dim* targ_1d = construct_target_1dim(n_peaks, peaks);
+  printf("# target mean, variance: %16.12g %16.12g \n", targ_1d->mean, targ_1d->variance);
   g_targ_1d = (const Target_1dim*)targ_1d;
 
 
@@ -69,8 +73,11 @@ int main(int argc, char* argv[]){
   }
   next_arg += 5*n_temperatures;
   int n_bins = atoi(argv[next_arg]);
+  int n_bins_1d = atoi(argv[next_arg+1]);
   n_bins += (n_bins % 2); // to make it even
-  printf("#  n_bins: %i \n", n_bins);
+  n_bins_1d += (n_bins_1d %2); 
+  printf("#  n_bins: %i n_bins_1d: %i \n", n_bins, n_bins_1d);
+  int seed = atoi(argv[next_arg+2]);
   // ******************************************************************
   //  normalize_targ_1dim(g_n_modes, g_peaks); //
 
@@ -79,7 +86,8 @@ int main(int argc, char* argv[]){
   gsl_rng_env_setup();
   const gsl_rng_type* rng_type = gsl_rng_default;
   g_rng = gsl_rng_alloc(rng_type);
-
+  printf("# seed: %i \n", seed);
+  gsl_rng_set(g_rng, seed);
   // *************** open output files *************
   g_tvd_vs_gen_fstream = fopen("tvd_vs_gen", "w");
 
@@ -94,19 +102,23 @@ int main(int argc, char* argv[]){
 
   Binning_spec_set the_bin_set;
   the_bin_set.ndim_bins =  construct_binning_spec(n_bins, targ_1d, -INFINITY, INFINITY); // Use for Ndim histograms
-  the_bin_set.onedim_bins = construct_binning_spec(2*n_bins, targ_1d, -INFINITY, INFINITY);
+  the_bin_set.onedim_bins = construct_binning_spec(n_bins_1d, targ_1d, -INFINITY, INFINITY);
   the_bin_set.orthants_bins = construct_binning_spec(2, targ_1d, -INFINITY, INFINITY); // bin for each orthant
   the_bin_set.positive_bins =  construct_binning_spec(n_bins/2, targ_1d, 0, INFINITY); 
-
+  //  print_binning_spec(the_bin_set.onedim_bins);
   Ndim_histogram* targprobs_ndim = init_target_distribution(n_dimensions, n_bins, 1, the_bin_set.ndim_bins);
   g_targprobs_ndim = targprobs_ndim;
-  Ndim_histogram* targprobs_1dim = init_target_distribution(1, 2*n_bins, 1, the_bin_set.onedim_bins);
+  //  print_ndim_array_of_double(targprobs_ndim->weights);
+  // exit(0);
+  Ndim_histogram* targprobs_1dim = init_target_distribution(1, n_bins_1d, 1, the_bin_set.onedim_bins);
   g_targprobs_1dim = targprobs_1dim;
+  //  print_ndim_array_of_double(targprobs_1dim->weights);
+  // exit(0);
   Ndim_histogram* targprobs_orthants = init_target_distribution(n_dimensions, 2, 1, the_bin_set.orthants_bins);
   g_targprobs_orthants = targprobs_orthants;
   Ndim_histogram* targprobs_one_orthant = init_target_distribution(n_dimensions, n_bins/2, 1, the_bin_set.positive_bins);
   g_targprobs_one_orthant = targprobs_one_orthant;
-  printf("XXX\n");
+  //  printf("XXX\n");
   double tvd_sum = 0.0;
   double tvdsq_sum = 0.0;
 
@@ -116,7 +128,7 @@ int main(int argc, char* argv[]){
       states[i] = construct_state(n_dimensions, targ_1d);
     }
     Multi_T_chain* multi_T_chain = construct_multi_T_chain(n_temperatures, temperatures, proposals, states, &the_bin_set);
-    printf("YYY\n");
+    //    printf("YYY\n");
   // ********** do burn-in ***********
     for(int n=0; n<=burn_in_steps; n++){
       multi_T_chain_within_T_mcmc_step(multi_T_chain);
@@ -151,9 +163,10 @@ int main(int argc, char* argv[]){
 // propose uniformly from cube or ball centered on present point
 double* propose(int n_dim, double* x_array, Proposal* prop){
   double* prop_x_array = (double*)malloc(n_dim*sizeof(double));
-  //  printf("porposal:: %8.5f %8.5f %8.5f \n", prop->W1, prop->W2, prop->p1);
-  double Width = (drand() < prop->p1)? (double)prop->W1 : (double)prop->W2;
+  //  printf("porposal:: %s  %8.5f %8.5f %8.5f \n", prop->shape, prop->W1, prop->W2, prop->p1); 
+  double Width = (drand() < prop->p1)? prop->W1 : prop->W2;
   if(!strcmp(prop->shape, "gaussian")){
+    //   printf ("gaussian branch. width: %12.5g\n", Width);
     for(int i=0; i<n_dim; i++){
       prop_x_array[i] = x_array[i] + gsl_ran_gaussian(g_rng, Width);
     }
@@ -230,6 +243,7 @@ double find_bin_upper_edge(const Target_1dim* targ_1d, double xlo, double Q){
     q_xtry = integral_f_1dim(targ_1d, xlo, xtry);
     //    printf("C %g  %g %g \n", xlb, xub, xtry);
   }
+	//	printf("q_xtry, Q: %g %g \n", q_xtry, Q);
 	//  printf("xlo xlb xub xtry: %g %g %g %g \n", xlo, xlb, xub, xtry);
   return xtry;
 }
@@ -245,7 +259,7 @@ Ndim_histogram* init_target_distribution(int Ndim, int Ngrid_max, int normalize,
   targ_bin_probs->Ngrid_max = Ngrid_max;
   targ_bin_probs->weights = construct_ndim_array_of_double(Ndim, Ngrid_max, 0.0);
   targ_bin_probs->total_weight = 
-    set_ndim_array_of_double_to_target(targ_bin_probs->weights, 1.0, g_targ_1d->peaks, bins);
+    set_ndim_array_of_double_to_target(targ_bin_probs->weights, 1.0, g_targ_1d, bins);
   //  print_ndim_array_of_double(targ_bin_probs->weights); exit(0);
   if(normalize){
     normalize_ndim_histogram(targ_bin_probs);
@@ -277,7 +291,7 @@ void print_array_of_int(int Nsize, int* array){
 
 void print_array_of_double(int Nsize, double* array){
   for(int i=0; i<Nsize; i++){
-    printf("%8.4g ", array[i]);
+    printf("%11.8g ", array[i]);
   }// printf("\n");
 }
 
