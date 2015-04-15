@@ -74,7 +74,9 @@ typedef struct
 
 typedef struct
 {
+  const char* type; // "mcmc" or "iid"
   State* current_state;
+  double* sum_x; // sum over generations of point vector
   double temperature;
   int generation;
   int n_accept;
@@ -82,21 +84,30 @@ typedef struct
   double dsq_sum;
   int n_jumps;
   Proposal proposal; // each T can have its own proposal
+  
   Ndim_histogram* mcmc_out_hist;
   Ndim_histogram** mcmc_out_1d_hists; // for n_dim > 2, do n_dim 2d histograms
-  Ndim_histogram* mcmc_out_orthants_hist; // 1 bin for each orthant (i.e. n_bin = 2, each dimension if weights equal)
+  Ndim_histogram* mcmc_out_orthants_hist; // 1 bin for each orthant.
   Ndim_histogram* mcmc_out_reflected_hist; // pts reflected into all-positive orthant
 
-  Ndim_histogram* exact_draw_hist;
-  Ndim_histogram** exact_draw_1d_hists; // for n_dim > 2, do n_dim 2d histograms
-  Ndim_histogram* exact_draw_orthants_hist; // 1 bin for each orthant (i.e. n_bin = 2, each dimension if weights equal)
-  Ndim_histogram* exact_draw_reflected_hist; // pts reflected into all-positive orthant
+  /* Ndim_histogram* exact_draw_hist; */
+  /* Ndim_histogram** exact_draw_1d_hists; // for n_dim > 2, do n_dim 2d histograms */
+  /* Ndim_histogram* exact_draw_orthants_hist; // 1 bin for each orthant (i.e. n_bin = 2, each dimension if weights equal) */
+  /* Ndim_histogram* exact_draw_reflected_hist; // pts reflected into all-positive orthant */
+  int n_old_gees;
+  int n_recent_gees;
+  double* old_mcmcgees; // for now just holds the zeroth components of all the points.
+  double* recent_mcmcgees; 
+  /* double* old_iidgees; */
+  /* double* recent_iidgees; */
 } Single_T_chain;
 
 typedef struct
 {
   int n_temperatures;
   Single_T_chain** coupled_chains; // array of metropolis-coupled chains at different T's
+  int summary_generation; // tvd, ksd have been done up through this generation
+  int next_summary_generation; // tvd, ksd will next be done after this generation
 } Multi_T_chain;
 
 typedef struct
@@ -113,13 +124,13 @@ State* construct_state(int n_dimensions, const Target_1dim* targ_1d);
 void free_state(State* s);
 
 // Single_T_chain
-Single_T_chain* construct_single_T_chain(double T, Proposal P, State* S, const Binning_spec_set* bins);
+Single_T_chain* construct_single_T_chain(double T, Proposal P, State* S, const Binning_spec_set* bins, const char* type);
 State* single_T_chain_mcmc_step(Single_T_chain* chain);
 void single_T_chain_histogram_current_state(Single_T_chain* chain);
 void single_T_chain_output_tvd(Single_T_chain* chain);
 void free_single_T_chain(Single_T_chain* chain);
 // Multi_T_chain
-Multi_T_chain* construct_multi_T_chain(int n_temperatures, double* temperatures, Proposal* proposals, State** states, const Binning_spec_set* bins);
+Multi_T_chain* construct_multi_T_chain(int n_temperatures, double* temperatures, Proposal* proposals, State** states, const Binning_spec_set* bins, const char* type);
 void multi_T_chain_within_T_mcmc_step(Multi_T_chain* multi_T_chain);
 void multi_T_chain_T_swap_mcmc_step(Multi_T_chain* multi_T_chain);
 void free_multi_T_chain(Multi_T_chain* chain);

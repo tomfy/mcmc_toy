@@ -14,7 +14,6 @@ my $epsilon = 1e-6;
 # n_bins
 
 
-
 # GetOptions(
 # 	   'n_dimensions=s'           => \$gg_filename, #
 # 	   'nj!'          => \$do_nj, # whether to do NJ tree construction for actual data
@@ -32,13 +31,14 @@ my $n_generations = 100000;
 my $n_burn_in = 0;
 my $n_replicates = 1;		# > 1 not implemented 
 my $n_dimensions = 1;
-my $peaks_string = '-0.5, 0.05, 0.5; 0.5, 0.05, 0.5';
+my $peaks_string = '-0.5, 0.1, 0.5; 0.5, 0.1, 0.5';
 my $n_peaks;
 my $temperatures_string = '1.0';
 my $proposals_string = 'gaussian, SIGMA1, 1.4, 1.0'; # if multiple proposals, separate with ; e.g. 'gaussian 0.07 1.5 0.9; gaussian ... '
 my %n_bins_hash = (1 => 4096, 2 => 64, 3 => 16, 4 => 8);
 my $n_bins = $n_bins_hash{$n_dimensions};
 my $n_bins_1d = 216;
+my $chain_type = "mcmc"; # or "iid"
 GetOptions(
 	   'n_dimensions=i' => \$n_dimensions,
 	   'peaks=s' => \$peaks_string, # e.g. '-0.5,0.05,0.5;0.5,0.05,0.5'  -> 2 peaks
@@ -48,6 +48,7 @@ GetOptions(
 	   'n_1d_bins=i' => \$n_bins_1d,
 	   'n_generations=i' => \$n_generations,
 	   'n_burnin=i' => \$n_burn_in,
+	   'type=s' => \$chain_type,
 	  );
 
 
@@ -89,14 +90,25 @@ $proto_arg_string .= "$n_bins  $n_bins_1d  ";
 # $arg_string .= "1   1.0  ball 0.1 1.5 0.7   "; # n_temperatures, then T_i, proposal_i
 # $arg_string .= "25";  # n_bins
 
-my $tvd_limit = 0.1;
-
+my $tvd_limit = 0.08;
+my $n_reps = 32;
 srand();
 
  my $sig1 = 1.0;
-for ($sig1 = 0.8; $sig1 < 2.0; $sig1 *= 1.2)
-{
-  my $the_arg_string;
+ my @sigs = (2.0, 2.5, 3.0, 3.5, 4.5, 0.2);
+# for ($sig1 = ; $sig1 < 5.0; $sig1 *= 1.3)
+for my $sig1 (@sigs){
+	
+	trials($proto_arg_string, $n_reps, $tvd_limit, $sig1);
+ 
+}
+
+sub trials{
+	my $proto_arg_string = shift;
+	my $n_reps = shift;
+	my $tvd_limit = shift;
+	my $sig1 = shift;
+	my $the_arg_string;
   while (1) {
     $the_arg_string = $proto_arg_string;
  #   print "xxx $n_generations \n";
@@ -105,90 +117,70 @@ for ($sig1 = 0.8; $sig1 < 2.0; $sig1 *= 1.2)
     $the_arg_string =~ s/SIGMA1/$sig1/;
  #   print "b $the_arg_string \n";
     my $seed = 123456; # int(rand(1000000));
-    my $mcmc_toy_out =  `~/mcmc_toy/src/mcmc_toy $the_arg_string $seed `;
-  #  print "$mcmc_toy_out \n";
+    my $mcmc_toy_out =  `~/mcmc_toy/src/mcmc_toy $the_arg_string $seed $chain_type`;
+ #   print "$mcmc_toy_out \n";
 
     my $last_line = `tail -1 tvd_vs_gen`;
- #     print "# last line: ", $last_line;
+   #   print "# last line: ", $last_line;
+ #exit;
+
     my @tvds = split(" ", $last_line);
     shift @tvds;
     my @mcmc_1d_tvds = @tvds[3 .. 3+$n_dimensions-1];
     #  print $n_generations, "  ", join("  ", @mcmc_1d_tvds), "\n";
     #  print "min avg max: ", min(@mcmc_1d_tvds), " ", mean(@mcmc_1d_tvds), " ", max(@mcmc_1d_tvds), "\n";
     my $avg_1d_tvd = mean(@mcmc_1d_tvds);
-    # printf("avg 1d tvd: %7.4f \n", $avg_1d_tvd);
+ #   printf("avg 1d tvd: %7.4f \n", $avg_1d_tvd);
     last if($avg_1d_tvd < $tvd_limit);
     $n_generations = int( 1.2*$n_generations*($avg_1d_tvd/$tvd_limit)**2 );
-    # print "n gens: $n_generations \n";
+  #  print "n gens: $n_generations \n";
+  #  exit;
   }
-
-  my $n_reps = 16;
+#xit;
+  # my $n_reps = 4;
   # my ($avg_eff_ndim, $avg_eff_orthants, $avg_eff_reflected, $avg_eff_1dim) = (0, 0, 0, 0);
   my @avg_effs = (0, 0, 0, 0);
 
   # print "$the_arg_string \n";
-  my @mcmc_ndim_tvds = ();
-  my @mcmc_orthants_tvds = ();
-  my @mcmc_reflected_tvds = ();
-  my @mcmc_1dim_tvds = ();
+  my @ndim_tvds = ();
+  my @orthant_tvds = ();
+  my @refl_tvds = ();
+  my @onedim_tvds = ();
+  my @ms_dmus = ();
+  my @ksds = ();
+	my @mu = (0,0,0,0,0,0,0);
 
-  my @iid_ndim_tvds = ();
-  my @iid_orthants_tvds = ();
-  my @iid_reflected_tvds = ();
-  my @iid_1dim_tvds = ();
-my $sum_mcmc_mu_hat = 0.0;
-my $sum_iid_mu_hat = 0.0;
-my $sum_mcmc_mu_hat_squared = 0.0;
-my $sum_iid_mu_hat_squared = 0.0;
-  my @mcmc_mu_hats = ();
-  my @iid_mu_hats = ();
   for (1..$n_reps) {
     my $seed = int(rand(1000000));
-    # print "$_ $seed \n";
-    # $the_arg_string .= "$seed ";
-    # my $mcmc_toy_out = `~/mcmc_toy/src/mcmc_toy $arg_string `;
-    my $mcmc_toy_out =  `~/mcmc_toy/src/mcmc_toy $the_arg_string $seed `;
-system "~/mcmc_toy/src/mcmc_toy  $the_arg_string  $seed  >  mcmc_toy_samples_tmp";
-my $cmp_mcmc_iid_out = `~/mcmc_toy/src/cmp_mcmc_iid.pl < mcmc_toy_samples_tmp`;
-my ($mcmc_mu_hat, $mcmc_variance_hat, $iid_mu_hat, $iid_variance_hat) = split(" ", $cmp_mcmc_iid_out);
-    #  print $mcmc_toy_out, "\n";
-    push @mcmc_mu_hats, $mcmc_mu_hat;
-    push @iid_mu_hats, $iid_mu_hat;
-
-    my $last_line = `tail -1 tvd_vs_gen`;
-    #  print "$last_line";
-    my @cols = split(" ", $last_line);
-    my $gens = shift @cols;
-    my ($mcmc_ndim_tvd, $mcmc_orthants_tvd, $iid_ndim_tvd, $iid_orthants_tvd) = 
-      ($cols[0], $cols[1], $cols[3+$n_dimensions], $cols[4+$n_dimensions]);
-
-    #  print "efficiencies: ", ($iid_ndim_tvd/$mcmc_ndim_tvd)**2, "  ", ($iid_orthants_tvd/$mcmc_orthants_tvd)**2, "\n";
-    #    printf("%7.5f %7.5f %7.5f %7.5f  %7.5f\n",  $cols[3], $cols[0], $cols[2], $cols[1], $cols[$n_dimensions+3+1]);
-
-    my $nnn = $n_dimensions+3;
-    push @mcmc_ndim_tvds, $cols[0]; push @iid_ndim_tvds, $cols[$nnn];
-    push @mcmc_orthants_tvds, $cols[1]; push @iid_orthants_tvds, $cols[$nnn+1];
-    push @mcmc_reflected_tvds, $cols[2]; push @iid_reflected_tvds, $cols[$nnn+2];
-
-    for (my $i=3; $i<$n_dimensions+3; $i++) {
-      push @mcmc_1dim_tvds, $cols[$i]; push @iid_1dim_tvds, $cols[$nnn+$i];
+	system "~/mcmc_toy/src/mcmc_toy  $the_arg_string  $seed  'mcmc' >  mcmc_toy_samples_tmp";
+	my $last_line = `tail -1 tvd_vs_gen`;
+	#print $last_line;
+	my @cols = split(" ", $last_line);
+	#my ($ndim_tvd, $orth_tvd, $refl_tvd) = @cols[1,2,3];
+	push @ndim_tvds, $cols[1];
+	push @orthant_tvds, $cols[2];
+	push @refl_tvds, $cols[3];
+	for (my $i=3; $i<$n_dimensions+3; $i++) {
+      push @onedim_tvds, $cols[$i];
     }
-  }				# loop over reps
+	my $ms_dmu = 0.0;
+	my @muhats = @cols[4+$n_dimensions..3+2*$n_dimensions];
+	for(my $i=0; $i < scalar @muhats; $i++){
+		$ms_dmu += ($muhats[$i] - $mu[$i])**2;
+	}
+	my $rms_dmu = sqrt($ms_dmu); ## ??#
 
-  my @ndim_effs = map { ($mcmc_orthants_tvds[$_] > $epsilon)? ($iid_ndim_tvds[$_]/$mcmc_ndim_tvds[$_])**2 : 1 }  (0..scalar @mcmc_ndim_tvds-1);
-  my @orthants_effs = map { ($mcmc_orthants_tvds[$_] > $epsilon)? ($iid_orthants_tvds[$_]/$mcmc_orthants_tvds[$_])**2 : 1 } (0..scalar @mcmc_orthants_tvds-1);
-  my @reflected_effs = map { ($mcmc_reflected_tvds[$_] > $epsilon)? ($iid_reflected_tvds[$_]/$mcmc_reflected_tvds[$_])**2 : 1 } (0..scalar @mcmc_reflected_tvds-1);
-  my @onedim_effs =  map {($iid_1dim_tvds[$_]/$mcmc_1dim_tvds[$_])**2}  (0..scalar @mcmc_1dim_tvds-1);
+	push @ms_dmus, $ms_dmu;
+	my $ksd = pop @cols;
+	push @ksds, $ksd;
+}
 
-  #my @log_ndim_effs = map(log, @ndim_effs);
-
-  printf("%8i %8.5g    ", $n_generations, $sig1);
-  printf("%7.5f +- %8.6f   ", mean(@onedim_effs), stddev(@onedim_effs)/sqrt(scalar @onedim_effs));
-  printf("%7.5f +- %8.6f   ", mean(@ndim_effs), stddev(@ndim_effs)/sqrt(scalar @ndim_effs));
-  printf("%7.5f +- %8.6f   ", mean(@reflected_effs), stddev(@reflected_effs)/sqrt(scalar @reflected_effs));
-  printf("%7.5f +- %8.6f   ", mean(@orthants_effs), stddev(@orthants_effs)/sqrt(scalar @orthants_effs));
-  printf("%7.5f +- %8.6f   ", mean(@mcmc_mu_hats), stddev(@mcmc_mu_hats)/sqrt(scalar @mcmc_mu_hats));
-printf("%7.5f +- %8.6f   ", mean(@iid_mu_hats), stddev(@iid_mu_hats)/sqrt(scalar @iid_mu_hats));
-  print  "\n";
-
+printf("%8i %10.7f ", $n_generations, $sig1);
+printf("%10.7f ", mean(@ndim_tvds));
+printf("%10.7f ", mean(@orthant_tvds));
+printf("%10.7f ", mean(@refl_tvds));
+printf("%10.7f ", mean(@onedim_tvds));
+printf("%10.7f ", sqrt(mean(@ms_dmus)));
+printf("%10.7f ", mean(@ksds));
+print "\n";
 }

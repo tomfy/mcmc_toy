@@ -78,6 +78,7 @@ int main(int argc, char* argv[]){
   n_bins_1d += (n_bins_1d %2); 
   printf("#  n_bins: %i n_bins_1d: %i \n", n_bins, n_bins_1d);
   int seed = atoi(argv[next_arg+2]);
+  const char* chain_type = argv[next_arg+3];
   // ******************************************************************
   //  normalize_targ_1dim(g_n_modes, g_peaks); //
 
@@ -127,7 +128,7 @@ int main(int argc, char* argv[]){
     for(int i=0; i<n_temperatures; i++){
       states[i] = construct_state(n_dimensions, targ_1d);
     }
-    Multi_T_chain* multi_T_chain = construct_multi_T_chain(n_temperatures, temperatures, proposals, states, &the_bin_set);
+    Multi_T_chain* multi_T_chain = construct_multi_T_chain(n_temperatures, temperatures, proposals, states, &the_bin_set, chain_type);
     //    printf("YYY\n");
   // ********** do burn-in ***********
     for(int n=0; n<=burn_in_steps; n++){
@@ -217,6 +218,32 @@ double integral_f_1dim(const Target_1dim* targ_1d, double x, double y){ // integ
   // printf("A %g %g %g \n", x, y, integral);
   return integral;
 }
+
+double cdf(double y){
+  Target_peak_1dim* peaks = g_targ_1d->peaks;
+  double integral = 0.0;
+  for(int i=0; i<g_targ_1d->n_modes; i++){
+    integral += peaks[i].weight*gsl_cdf_gaussian_P(y-peaks[i].position, peaks[i].sigma); 
+  }
+  return integral;
+}
+
+
+
+int cmpfunc (const void * a, const void * b)
+{
+  double aa = *(double*)a;
+  double bb = *(double*)b;
+  int result = 0;
+  if(aa < bb){
+    result = -1;
+  }else if(aa > bb){
+    result = 1;
+  }
+  //  printf("%g %g %i \n", aa, bb, result);
+  return result;
+}
+
 
 double find_bin_upper_edge(const Target_1dim* targ_1d, double xlo, double Q){
   // returns x, the upper limit of integration such that integral from xlo to x of f_1dim
@@ -323,7 +350,135 @@ double* draw_ndim(int n_dim, const Target_1dim* targ_1d){
   return xs;
 }
 
+double* copy_array(const int size, const double* a){
+  double* copy =  (double*)malloc(size*sizeof(double));
+  for(int i=0; i<size; i++){
+    copy[i] = a[i];
+  }
+  return copy;
+}
 
+double* merge_sorted_arrays(const int size1, const double* a1, const int size2, const double* a2){
+  // allocates array of size size1+size2, merges two arrays a1 and a2, which must be already sorted
+  // from smallest to largest (i.e. a1[0] <= a1[1], etc.)
+  //  printf("in merge_ ... size1, size2: %i %i \n", size1, size2);
+  double * ma = (double*)malloc((size1 + size2)*sizeof(double));
+  int i=0, i1=0, i2=0;
+  while(i < (size1 + size2) ){
+    //   printf("i1, i2, a1i1, a2i2: %i %i %g %g \n", i1, i2, a1[i1], a2[i2]);
+    if(i1<size1){
+      if(i2<size2){
+	if(a1[i1] <= a2[i2]){
+	  ma[i] = a1[i1];
+	  i1++;
+	}else{
+	  ma[i] = a2[i2];
+	  i2++;
+	}
+	//	i++;
+      }else{ // i1<size1, but i2 == size2
+	ma[i] = a1[i1];
+	i1++;
+	//	i++;
+      }
+    }else{ // i1 !<size1
+      if(i2 < size2){
+	ma[i] = a2[i2];
+	i2++;
+	//	i++;
+      }
+    }
+    i++;
+    //    printf("%i %i %i %i %i \n", size1, size2, i, i1, i2);
+  }
+  return ma;
+}
+
+
+double Kolmogorov_smirnov_D_statistic_2_sample(const int size1, const double* a1, const int size2, const double* a2){
+  // calculates the 2-sample KSD statistic for the the two samples stored in arrays a1 and a2
+  double d1 = 1.0/(double)size1;
+  double d2 = 1.0/(double)size2;
+  double c1 = 0.0;
+  double c2 = 0.0;
+  double D = 0.0;
+  int i=0, i1=0, i2=0;
+  while(1){
+    if(a1[i1] <= a2[i2]){
+      double next_c1 = (i1+1)*d1; // c1 + d1;
+      if(next_c1 > c2){
+	if( next_c1-c2 > D ){ D = next_c1 - c2; }
+      }
+      c1 = next_c1;
+      i1++;
+      if(i1 >= size1){ break; }
+    }else{
+      double next_c2 = (i2+1)*d2;
+      if(next_c2 > c1){
+	if( next_c2-c1 > D ){ D = next_c2 - c1; }
+      }
+      c2 = next_c2;
+      i2++;
+      if(i2 >= size2){ break; }
+    }
+  }
+  return D;
+}
+
+double Kolmogorov_smirnov_D_statistic_1_sample(const int size1, const double* a1, double (*cdf)(double) ){
+  // calculates the 1-sample KSD statistic for the the sample stored in array a, compared
+  // to the cdf specified by the function argument.
+   double d1 = 1.0/(double)size1;
+  double c1 = 0.0;
+  double D = 0.0;
+  for(int i1=0; i1 < size1; i1++){
+    double next_c1 = (i1+1)*d1;
+    double next_d12 = next_c1 - cdf(a1[i1]);
+    //    fprintf(stdout, "XXX: %i %12.5g  %12.5g %12.5g %12.5g\n", i1, a1[i1], cdf(a1[i1]), next_c1, D); 
+    if( next_d12 > 0.5*d1){
+      if(next_d12 > D){
+	D = next_d12; 
+      }
+    }else{ // 
+      double d12 = next_d12 - d1;
+      if(fabs(d12) > D){ 
+	D = fabs(d12);
+      }
+    }
+    c1 = next_c1;
+  }
+  //  printf("returning from KSD1: %12.5g\n", D);
+  return D;
+}
+
+double g(State* s){
+  int n_dim = s->n_dimensions;
+  return s->point[0]; // just return 0th component for now
+}
+
+void add_arrays(int size, double* sum_x, const double* x){ // add second array to first array
+	for(int i=0; i<size; i++){
+		sum_x[i] += x[i];
+	}
+}
+
+/* double* merge_sorted_arrays(const int size1, const double* a1, const int size2, const double* a2){ */
+/*   // allocates array of size size1+size2, merges two arrays a1 and a2, which must be already sorted */
+/*   // from smallest to largest (i.e. a1[0] <= a1[1], etc.) */
+/*   double * ma = (double*)malloc((size1 + size2)*sizeof(double)); */
+/*   int i=0, i1=0, i2=0; */
+/*   while(i1 < (size1 + size2) ){ */
+/*     if(a1[i1] <= a2[i2]){ */
+/*       ma[i] = a1[i1]; */
+/*       i1++; */
+/*     }else{ */
+/*       ma[i] = a2[i2]; */
+/*       i2++; */
+/*     } */
+/*     i++; */
+/*   } */
+/*   return ma; */
+/* } */
 
 // ***** unused/obsolete stuff ****
 

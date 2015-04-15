@@ -18,7 +18,9 @@ extern FILE* g_tvd_vs_gen_fstream;
 #define UNDERFLOW_ID (-1)
 #define OVERFLOW_ID (-2)
 // #define OUTPUT_TVD_VS_N (1)
-#define TVD_EVERY (1000)
+#define FIRST_SUMMARY_GEN (1000)
+// #define TVD_EVERY (5000)
+#define SUMMARY_GEN_FACTOR (1.3)
 #define DO_EXACT (1)
 #define DO_TVD (1)
 
@@ -36,7 +38,17 @@ double f_1dim (const Target_1dim* targ_1d, double x);
 double F(const Target_1dim* targ_1d, int Ndim, double* x_array);
 double draw_1dim(const Target_1dim* targ_1d);
 double* draw_ndim(int n_dim, const Target_1dim* targ_1d);
-double integral_f_1dim(const Target_1dim* targ_1d, double x, double y);
+double integral_f_1dim(const Target_1dim* targ_1d, double x, double y); // integral from x to y
 double find_bin_upper_edge(const Target_1dim* targ_1d, double xlo, double Q);
 
 double total_variation_distance(const Ndim_histogram* targprobs, const Ndim_histogram* hist);
+
+double* merge_sorted_arrays(const int size1, const double* a1, const int size2, const double* a2);
+double Kolmogorov_smirnov_D_statistic_2_sample(const int size1, const double* a1, const int size2, const double* a2);
+double Kolmogorov_smirnov_D_statistic_1_sample(const int size1, const double* a1, double (*cdf)(double) );
+double cdf(double y);
+int cmpfunc (const void * a, const void * b);
+double g(State* s);
+double* copy_array(const int size, const double* a);
+
+void add_arrays(int size, double* sum_x, const double* x);
