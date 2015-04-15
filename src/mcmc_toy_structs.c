@@ -242,7 +242,7 @@ void multi_T_chain_within_T_mcmc_step(Multi_T_chain* multi_T_chain){
       
       chain->recent_mcmcgees[j] = g(chain->current_state);
    //   printf("FRED j: %i %i %g \n", chain->n_recent_gees, j, chain->recent_mcmcgees[j]);
-      if(DO_EXACT){ 
+      if(DO_EXACT){
 	//	single_T_chain_histogram_exact_draw(multi_T_chain->coupled_chains[i], exact_xs);
 	//add_data_pt_to_ndim_histogram(chain->exact_draw_hist, n_dim,  exact_xs); }
 	//	printf("generation: %i \n", chain->generation); 

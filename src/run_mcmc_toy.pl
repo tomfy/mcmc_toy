@@ -90,16 +90,16 @@ $proto_arg_string .= "$n_bins  $n_bins_1d  ";
 # $arg_string .= "1   1.0  ball 0.1 1.5 0.7   "; # n_temperatures, then T_i, proposal_i
 # $arg_string .= "25";  # n_bins
 
-my $tvd_limit = 0.08;
+my $tvd_limit = 0.1;
 my $n_reps = 32;
 srand();
 
  my $sig1 = 1.0;
- my @sigs = (2.0, 2.5, 3.0, 3.5, 4.5, 0.2);
+ my @sigs = (0.15, 0.2, 0.3, 0.5, 0.7, 1.0, 1.4, 2.0, 4.0, 6.0, 8.0);
 # for ($sig1 = ; $sig1 < 5.0; $sig1 *= 1.3)
 for my $sig1 (@sigs){
 	
-	trials($proto_arg_string, $n_reps, $tvd_limit, $sig1);
+	trials($proto_arg_string, $n_reps, $tvd_limit, $sig1, $n_dimensions);
  
 }
 
@@ -108,40 +108,26 @@ sub trials{
 	my $n_reps = shift;
 	my $tvd_limit = shift;
 	my $sig1 = shift;
+	my $n_dimensions = shift;
 	my $the_arg_string;
+	# do a run to check that 1d tvd is small enough, 
   while (1) {
     $the_arg_string = $proto_arg_string;
- #   print "xxx $n_generations \n";
     $the_arg_string =~ s/NGENERATIONS/$n_generations/;
- #   print "a $the_arg_string \n";
     $the_arg_string =~ s/SIGMA1/$sig1/;
- #   print "b $the_arg_string \n";
     my $seed = 123456; # int(rand(1000000));
     my $mcmc_toy_out =  `~/mcmc_toy/src/mcmc_toy $the_arg_string $seed $chain_type`;
- #   print "$mcmc_toy_out \n";
-
     my $last_line = `tail -1 tvd_vs_gen`;
-   #   print "# last line: ", $last_line;
  #exit;
-
     my @tvds = split(" ", $last_line);
     shift @tvds;
     my @mcmc_1d_tvds = @tvds[3 .. 3+$n_dimensions-1];
-    #  print $n_generations, "  ", join("  ", @mcmc_1d_tvds), "\n";
-    #  print "min avg max: ", min(@mcmc_1d_tvds), " ", mean(@mcmc_1d_tvds), " ", max(@mcmc_1d_tvds), "\n";
     my $avg_1d_tvd = mean(@mcmc_1d_tvds);
- #   printf("avg 1d tvd: %7.4f \n", $avg_1d_tvd);
     last if($avg_1d_tvd < $tvd_limit);
     $n_generations = int( 1.2*$n_generations*($avg_1d_tvd/$tvd_limit)**2 );
-  #  print "n gens: $n_generations \n";
-  #  exit;
   }
-#xit;
-  # my $n_reps = 4;
-  # my ($avg_eff_ndim, $avg_eff_orthants, $avg_eff_reflected, $avg_eff_1dim) = (0, 0, 0, 0);
-  my @avg_effs = (0, 0, 0, 0);
 
-  # print "$the_arg_string \n";
+  my @avg_effs = (0, 0, 0, 0);
   my @ndim_tvds = ();
   my @orthant_tvds = ();
   my @refl_tvds = ();
@@ -149,7 +135,8 @@ sub trials{
   my @ms_dmus = ();
   my @ksds = ();
 	my @mu = (0,0,0,0,0,0,0);
-
+	my %dmus = (); # $dmus{$i} is array_ref to array of dmus for component $i
+for(0..$n_dimensions-1){ $dmus{$_} = []; }
   for (1..$n_reps) {
     my $seed = int(rand(1000000));
 	system "~/mcmc_toy/src/mcmc_toy  $the_arg_string  $seed  'mcmc' >  mcmc_toy_samples_tmp";
@@ -167,6 +154,7 @@ sub trials{
 	my @muhats = @cols[4+$n_dimensions..3+2*$n_dimensions];
 	for(my $i=0; $i < scalar @muhats; $i++){
 		$ms_dmu += ($muhats[$i] - $mu[$i])**2;
+		push @{$dmus{$i}}, $muhats[$i];
 	}
 	my $rms_dmu = sqrt($ms_dmu); ## ??#
 
@@ -176,11 +164,16 @@ sub trials{
 }
 
 printf("%8i %10.7f ", $n_generations, $sig1);
-printf("%10.7f ", mean(@ndim_tvds));
-printf("%10.7f ", mean(@orthant_tvds));
-printf("%10.7f ", mean(@refl_tvds));
-printf("%10.7f ", mean(@onedim_tvds));
-printf("%10.7f ", sqrt(mean(@ms_dmus)));
-printf("%10.7f ", mean(@ksds));
+printf("%10.7f +- %10.7f ", mean(@ndim_tvds), stddev(@ndim_tvds)/sqrt(scalar @ndim_tvds));
+printf("%10.7f +- %10.7f ", mean(@orthant_tvds), stddev(@orthant_tvds)/sqrt(scalar @orthant_tvds));
+printf("%10.7f +- %10.7f ", mean(@refl_tvds), stddev(@refl_tvds)/sqrt(scalar @refl_tvds));
+printf("%10.7f +- %10.7f ", mean(@onedim_tvds), stddev(@onedim_tvds)/sqrt(scalar @onedim_tvds));
+
+for(0..$n_dimensions-1){
+	printf("%10.7f +- %10.7f ", mean(@{$dmus{$_}}), stddev(@{$dmus{$_}})/sqrt(scalar @{$dmus{$_}}) );
+}
+printf("%10.7f +- %10.7f ", mean(@ms_dmus), stddev(@ms_dmus/sqrt(scalar @ms_dmus)));
+
+printf("%10.7f +- %10.7f ", mean(@ksds), stddev(@ksds)/sqrt(scalar @ksds));
 print "\n";
 }
