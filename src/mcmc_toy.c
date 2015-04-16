@@ -19,56 +19,59 @@ const Ndim_histogram* g_targprobs_one_orthant;
 gsl_rng* g_rng;
 
 FILE* g_tvd_vs_gen_fstream; 
+FILE* g_run_params_fstream;
 
 // main:
 int main(int argc, char* argv[]){
+ g_run_params_fstream = fopen("run_params", "w");
   // ********** read control parameters from command line: ***************
-  printf("# ");
+  fprintf(g_run_params_fstream,"# ");
   for(int i=0; i<argc; i++){
-    printf("%s; ", argv[i]);
-  }printf("\n");
+    fprintf(g_run_params_fstream,"%s; ", argv[i]);
+  }fprintf(g_run_params_fstream,"\n");
   
   int n_dimensions = atoi(argv[1]);
-  printf("# n_dimensions: %i \n", n_dimensions);
+  fprintf(g_run_params_fstream,"# n_dimensions: %i \n", n_dimensions);
 
   //  Target_1dim* targ_1d = (Target_1dim*)malloc(sizeof(Target_1dim));
   //  targ_1d->n_modes = 
     int n_peaks = atoi(argv[2]);
-  printf("# n_peaks: %i \n", n_peaks);
+  fprintf(g_run_params_fstream,"# n_peaks: %i \n", n_peaks);
   //Target_peak_1dim* 
   Target_peak_1dim* peaks = (Target_peak_1dim*) malloc(n_peaks*sizeof(Target_peak_1dim));
   for(int j=0; j<n_peaks; j++){
     peaks[j].position = atof(argv[3 + 3*j]);
     peaks[j].sigma = atof(argv[4 + 3*j]);
     peaks[j].weight = atof(argv[5 + 3*j]);
-    printf("# peak %i; position,sigma,weight: %8.5f %8.5f %8.5f \n",j, peaks[j].position, peaks[j].sigma, peaks[j].weight);
+    fprintf(g_run_params_fstream,"# peak %i; position,sigma,weight: %8.5f %8.5f %8.5f \n",j, peaks[j].position, peaks[j].sigma, peaks[j].weight);
   }
   //  targ_1d->peaks = peaks; 
   //  normalize_target_1dim(targ_1d);
 
   Target_1dim* targ_1d = construct_target_1dim(n_peaks, peaks);
-  printf("# target mean, variance: %16.12g %16.12g \n", targ_1d->mean, targ_1d->variance);
+  fprintf(g_run_params_fstream,"# target mean, variance: %16.12g %16.12g \n", targ_1d->mean, targ_1d->variance);
   g_targ_1d = (const Target_1dim*)targ_1d;
 
 
+  char run_param_string[10000];
   int next_arg = 3 + 3*targ_1d->n_modes;
   int burn_in_steps = atoi(argv[next_arg]);
   int mcmc_steps = atoi(argv[next_arg+1]);
   int n_replicates = atoi(argv[next_arg+2]);
-  printf("# burn-in, mcmc steps, n reps: %i %i %i \n", burn_in_steps, mcmc_steps, n_replicates);
+  fprintf(g_run_params_fstream,"# burn-in, mcmc steps, n reps: %i %i %i \n", burn_in_steps, mcmc_steps, n_replicates);
   int n_temperatures = atoi(argv[next_arg+3]);
-  printf("# n temperatures: %i \n", n_temperatures);
+  fprintf(g_run_params_fstream,"# n temperatures: %i \n", n_temperatures);
   next_arg += 4;
   double* temperatures = (double*)malloc(n_temperatures*sizeof(double));
   Proposal* proposals = (Proposal*)malloc(n_temperatures*sizeof(Proposal));
   for(int j=0; j<n_temperatures; j++){
     temperatures[j] = atof(argv[next_arg + 5*j]);
     proposals[j].shape = argv[next_arg+1 + 5*j];
-    //   printf("%s \n", proposals[j].shape);
+    //   fprintf(g_run_params_fstream,"%s \n", proposals[j].shape);
     proposals[j].W1 = atof(argv[next_arg+2 + 5*j]);
     proposals[j].W2 = atof(argv[next_arg+3 + 5*j]);
     proposals[j].p1 = atof(argv[next_arg+4 + 5*j]);
-    printf("#  T, Proposal(shape,W1,W2,p1):  %8.5f %12s %8.5f %8.5f %8.5f \n", 
+    fprintf(g_run_params_fstream,"#  T, Proposal(shape,W1,W2,p1):  %8.5f %12s %8.5f %8.5f %8.5f \n", 
 	   temperatures[j], proposals[j].shape, proposals[j].W1, proposals[j].W2, proposals[j].p1);
   }
   next_arg += 5*n_temperatures;
@@ -76,7 +79,7 @@ int main(int argc, char* argv[]){
   int n_bins_1d = atoi(argv[next_arg+1]);
   n_bins += (n_bins % 2); // to make it even
   n_bins_1d += (n_bins_1d %2); 
-  printf("#  n_bins: %i n_bins_1d: %i \n", n_bins, n_bins_1d);
+  fprintf(g_run_params_fstream,"#  n_bins: %i n_bins_1d: %i \n", n_bins, n_bins_1d);
   int seed = atoi(argv[next_arg+2]);
   const char* chain_type = argv[next_arg+3];
   // ******************************************************************
@@ -87,7 +90,7 @@ int main(int argc, char* argv[]){
   gsl_rng_env_setup();
   const gsl_rng_type* rng_type = gsl_rng_default;
   g_rng = gsl_rng_alloc(rng_type);
-  printf("# seed: %i \n", seed);
+  fprintf(g_run_params_fstream,"# seed: %i \n", seed);
   gsl_rng_set(g_rng, seed);
   // *************** open output files *************
   g_tvd_vs_gen_fstream = fopen("tvd_vs_gen", "w");
@@ -120,8 +123,8 @@ int main(int argc, char* argv[]){
   Ndim_histogram* targprobs_one_orthant = init_target_distribution(n_dimensions, n_bins/2, 1, the_bin_set.positive_bins);
   g_targprobs_one_orthant = targprobs_one_orthant;
   //  printf("XXX\n");
-  double tvd_sum = 0.0;
-  double tvdsq_sum = 0.0;
+  // double tvd_sum = 0.0;
+  //  double tvdsq_sum = 0.0;
 
   for(int j=0; j<n_replicates; j++){
     State** states = (State**)malloc(n_temperatures*sizeof(State*));
@@ -129,28 +132,28 @@ int main(int argc, char* argv[]){
       states[i] = construct_state(n_dimensions, targ_1d);
     }
     Multi_T_chain* multi_T_chain = construct_multi_T_chain(n_temperatures, temperatures, proposals, states, &the_bin_set, chain_type);
-    //    printf("YYY\n");
   // ********** do burn-in ***********
-    for(int n=0; n<=burn_in_steps; n++){
+    for(int n=0; n<burn_in_steps; n++){
       multi_T_chain_within_T_mcmc_step(multi_T_chain);
     } 
 
     // ********** do post-burn-in *********
-    double tvd = 0.0;
     for(int n=1; n<=mcmc_steps; n++){   
       // take a mcmc step
       multi_T_chain_within_T_mcmc_step(multi_T_chain);   
+      //  fprintf(stderr, "n: %i \n", n);
     }
+    multi_T_chain_output_tvd(multi_T_chain);
 
-    tvd_sum += tvd;
-    tvdsq_sum += tvd*tvd;
+    /* tvd_sum += tvd; */
+    /* tvdsq_sum += tvd*tvd; */
     //  printf("before free_multi...\n");
     free_multi_T_chain(multi_T_chain);
   } // end loop over reps
   // printf("after reps loop...\n");
-  double tvd_avg = tvd_sum/n_replicates;
-  double tvd_variance = tvdsq_sum/n_replicates - tvd_avg*tvd_avg;
-  double tvd_stderr = sqrt(tvd_variance)/sqrt((double)n_replicates);
+  /* double tvd_avg = tvd_sum/n_replicates; */
+  /* double tvd_variance = tvdsq_sum/n_replicates - tvd_avg*tvd_avg; */
+  /* double tvd_stderr = sqrt(tvd_variance)/sqrt((double)n_replicates); */
   //      printf("%4i  %8i  %10.6f +- %10.6f  %10.6f  %10.6f \n", k, n_jumps, tvd_avg, tvd_stderr, (double)Naccept_sum/(Naccept_sum+Nreject_sum), sqrt(sum_dsq/(n_replicates*mcmc_steps)));
   //	printf("\n\n");
   fflush(stdout);
@@ -451,9 +454,35 @@ double Kolmogorov_smirnov_D_statistic_1_sample(const int size1, const double* a1
   return D;
 }
 
-double g(State* s){
+double g(const State* s){
   int n_dim = s->n_dimensions;
   return s->point[0]; // just return 0th component for now
+}
+
+double g_diag(const State* s){
+  int n_dim = s->n_dimensions;
+  double result = 0.0;
+  for(int i=0; i<n_dim; i++){
+    result += s->point[i];
+  }
+  return result; // just return 0th component for now
+}
+
+double g_shortrange(const State* s){ // either +1 or -1; changes sign each time one component moves past a peak position
+  // so there are 2^d different regions (half +1, half -1) converging at each peak.
+  int n_dim = s->n_dimensions;
+  double result = -1.0;
+  int n_modes = g_targ_1d->n_modes;
+  Target_peak_1dim* peaks = g_targ_1d->peaks;
+  for(int i=0; i<n_dim; i++){
+    double x = s->point[i];
+    for(int j=0; j<n_modes; j++){
+      if(x > peaks[j].position){
+	result *= -1.0;
+      }
+    }   
+  }
+  return result;
 }
 
 void add_arrays(int size, double* sum_x, const double* x){ // add second array to first array

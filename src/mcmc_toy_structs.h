@@ -77,6 +77,7 @@ typedef struct
   const char* type; // "mcmc" or "iid"
   State* current_state;
   double* sum_x; // sum over generations of point vector
+  double sum_q; // sum of g_shortrange (i.e +- 1, changing at each peak
   double temperature;
   int generation;
   int n_accept;
@@ -133,6 +134,7 @@ void free_single_T_chain(Single_T_chain* chain);
 Multi_T_chain* construct_multi_T_chain(int n_temperatures, double* temperatures, Proposal* proposals, State** states, const Binning_spec_set* bins, const char* type);
 void multi_T_chain_within_T_mcmc_step(Multi_T_chain* multi_T_chain);
 void multi_T_chain_T_swap_mcmc_step(Multi_T_chain* multi_T_chain);
+void multi_T_chain_output_tvd(Multi_T_chain* multi_T_chain);
 void free_multi_T_chain(Multi_T_chain* chain);
 // Ndim_histogram
 Ndim_histogram* construct_ndim_histogram(int n_dim, const Binning_spec* bins); //(int Ndim, int Ngrid_max);

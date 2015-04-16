@@ -54,16 +54,7 @@ Single_T_chain* construct_single_T_chain(double T, Proposal P, State* S, const B
     }
     single_T_chain->mcmc_out_orthants_hist = construct_ndim_histogram(S->n_dimensions, bins->orthants_bins);
     single_T_chain->mcmc_out_reflected_hist = construct_ndim_histogram(S->n_dimensions, bins->positive_bins);
-   /*  if(DO_EXACT){ */
-   /*    single_T_chain->exact_draw_hist = construct_ndim_histogram(S->n_dimensions, bins->ndim_bins); */
-   /* single_T_chain->exact_draw_1d_hists = (Ndim_histogram**)malloc(S->n_dimensions*sizeof(Ndim_histogram*)); */
-   /*  for(int i=0; i<S->n_dimensions; i++){ */
-   /*    single_T_chain->exact_draw_1d_hists[i] = construct_ndim_histogram(1, bins->onedim_bins); */
-   /*  } */
-   /*  single_T_chain->exact_draw_orthants_hist = construct_ndim_histogram(S->n_dimensions, bins->orthants_bins); */
-   /*  single_T_chain->exact_draw_reflected_hist = construct_ndim_histogram(S->n_dimensions, bins->positive_bins); */
-   /*    //   single_T_chain->exact_draw_hist->bins = bins; */
-   /*  } */
+  
     // TVD and K-S D statistic stuff
     single_T_chain->n_old_gees = 0;
     single_T_chain->n_recent_gees = FIRST_SUMMARY_GEN;
@@ -124,11 +115,12 @@ State* single_T_chain_mcmc_step(Single_T_chain* chain){
     chain->n_accept++;
   }
   add_arrays(Ndim, chain->sum_x, the_state->point);
-
+  chain->sum_q += g_shortrange(the_state);
   chain->dsq_sum += dsq;
   chain->n_jumps += n_jumps;
   chain->generation++;
   chain->current_state = the_state;
+  //  fprintf(stderr, "geneartions: %i \n", chain->generation);
   return the_state;
 }
 
@@ -155,7 +147,9 @@ void single_T_chain_histogram_current_state(Single_T_chain* chain){
 
 void single_T_chain_output_tvd(Single_T_chain* chain){
 
-  fprintf(g_tvd_vs_gen_fstream, "%8i  ", chain->generation); 
+  fprintf(g_tvd_vs_gen_fstream, "%8i  ", chain->generation);
+
+  //  fprintf(g_tvd_vs_gen_fstream, "%8.5f %8.5f %8.5f ", chain->proposal.W1, chain->proposal.W2, chain->proposal.p1);
   if(chain->mcmc_out_hist != NULL){
     double tvd = total_variation_distance(g_targprobs_ndim, chain->mcmc_out_hist);
     fprintf(g_tvd_vs_gen_fstream, "%12.6g ", tvd);
@@ -168,8 +162,9 @@ void single_T_chain_output_tvd(Single_T_chain* chain){
       fprintf(g_tvd_vs_gen_fstream, "%12.6g ", tvd);
     }
       for(int i=0; i<chain->current_state->n_dimensions; i++){
-      fprintf(g_tvd_vs_gen_fstream, "%12.6g ", chain->sum_x[i]/chain->generation); // output muhats
+	fprintf(g_tvd_vs_gen_fstream, "%12.6g ", chain->sum_x[i]/chain->generation); // output muhats
     } 
+      fprintf(g_tvd_vs_gen_fstream, "%12.6g ", chain->sum_q/chain->generation); // output qhat
 
   double mcmc_KSD_1s;
   double* all_mcmcgees = (double*)malloc(chain->generation*sizeof(double));
@@ -241,20 +236,21 @@ void multi_T_chain_within_T_mcmc_step(Multi_T_chain* multi_T_chain){
       int j = chain->generation - chain->n_old_gees - 1; // (chain->generation - 1) % TVD_EVERY;
       
       chain->recent_mcmcgees[j] = g(chain->current_state);
-   //   printf("FRED j: %i %i %g \n", chain->n_recent_gees, j, chain->recent_mcmcgees[j]);
-      if(DO_EXACT){
-	//	single_T_chain_histogram_exact_draw(multi_T_chain->coupled_chains[i], exact_xs);
-	//add_data_pt_to_ndim_histogram(chain->exact_draw_hist, n_dim,  exact_xs); }
-	//	printf("generation: %i \n", chain->generation); 
-	
+   //   printf("FRED j: %i %i %g \n", chain->n_recent_gees, j, chain->recent_mcmcgees[j]);	
 	if(chain->generation == chain->n_old_gees + chain->n_recent_gees){ // multi_T_chain->next_summary_generation){  // %TVD_EVERY == 0){	 
 	  //	  printf("about to call output_tvd...\n");
 	  single_T_chain_output_tvd(chain);
 	} // if gen % TVD_EVERY == 0
-      }     
+         
     }
     free(exact_xs);
   }
+}
+
+void multi_T_chain_output_tvd(Multi_T_chain* multi_T_chain){
+for(int i=0; i<multi_T_chain->n_temperatures; i++){
+  single_T_chain_output_tvd(multi_T_chain->coupled_chains[i]);
+ }
 }
 
 void free_multi_T_chain(Multi_T_chain* chain){

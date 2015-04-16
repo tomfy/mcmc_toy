@@ -10,6 +10,7 @@ extern const Ndim_histogram* g_targprobs_one_orthant;
 extern const gsl_rng_type* g_rng_type;
 extern gsl_rng* g_rng;
 extern FILE* g_tvd_vs_gen_fstream; 
+extern FILE* g_run_params_fstream;
 
 #define M_PI (3.14159265358979323846)
 #define ONEOVERSQRT2PI  (1.0/sqrt(2.0*M_PI))
@@ -21,7 +22,7 @@ extern FILE* g_tvd_vs_gen_fstream;
 #define FIRST_SUMMARY_GEN (1000)
 // #define TVD_EVERY (5000)
 #define SUMMARY_GEN_FACTOR (1.3)
-#define DO_EXACT (1)
+#define DO_EXACT (0)
 #define DO_TVD (1)
 
 // function declarations:
@@ -48,7 +49,9 @@ double Kolmogorov_smirnov_D_statistic_2_sample(const int size1, const double* a1
 double Kolmogorov_smirnov_D_statistic_1_sample(const int size1, const double* a1, double (*cdf)(double) );
 double cdf(double y);
 int cmpfunc (const void * a, const void * b);
-double g(State* s);
+double g(const State* s);
+double g_diag(const State* s);
+double g_shortrange(const State* s);
 double* copy_array(const int size, const double* a);
 
 void add_arrays(int size, double* sum_x, const double* x);
