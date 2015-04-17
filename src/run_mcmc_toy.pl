@@ -91,8 +91,8 @@ $proto_arg_string .= "$n_bins  $n_bins_1d  ";
 # $arg_string .= "1   1.0  ball 0.1 1.5 0.7   "; # n_temperatures, then T_i, proposal_i
 # $arg_string .= "25";  # n_bins
 
-my $tvd_limit = 0.08 ;
-my $n_reps = 16;
+my $tvd_limit = 0.05 ;
+my $n_reps = 20;
 srand();
 
 my $sig1 = 0.75;
@@ -156,43 +156,58 @@ sub trials{
 #     }
 
     my $last_line = `tail -1 tvd_vs_gen`;
-    print "$sig1 $last_line" ;
+ #   print "$sig1 $last_line" ;
     my @cols = split(" ", $last_line);
     #my ($ndim_tvd, $orth_tvd, $refl_tvd) = @cols[1,2,3];
+    my $rearranged_last_line = "$sig1  " . $cols[0] . "  ";
     push @ndim_tvds, $cols[1];
+    $rearranged_last_line .= $cols[1] . "  ";
     push @orthant_tvds, $cols[2];
+$rearranged_last_line .= $cols[2] . "  ";
     push @refl_tvds, $cols[3];
-    for (my $i=3; $i<$n_dimensions+3; $i++) {
-      push @onedim_tvds, $cols[$i];
-    }
-    my $ms_dmu = 0.0;
+$rearranged_last_line .= $cols[3] . "  ";
+
+ my $ksd = pop @cols;
+    push @ksds, $ksd;
+   $rearranged_last_line .= $ksd . "  ";
+    my $mean_q = pop @cols;
+#print "ms_dmu, ksd, mean q: $ms_dmu  $ksd  $mean_q \n";
+    push @mean_qs, $mean_q;
+ $rearranged_last_line .= $mean_q . "  ";
+
+  my $ms_dmu = 0.0;
     my @muhats = @cols[4+$n_dimensions..3+2*$n_dimensions];
     for (my $i=0; $i < scalar @muhats; $i++) {
-      $ms_dmu += ($muhats[$i] - $mu[$i])**2;
-      push @{$dmus{$i}}, $muhats[$i];
+      my $dmu = ($muhats[$i] - $mu[$i])**2;
+      $ms_dmu += $dmu * $dmu;
+      push @{$dmus{$i}}, $dmu;
+      $rearranged_last_line .= $dmu*$dmu . "  "
     }
     my $rms_dmu = sqrt($ms_dmu); ## ??#
 
     push @ms_dmus, $ms_dmu;
-    my $ksd = pop @cols;
-    push @ksds, $ksd;
-    my $mean_q = pop @cols;
-#print "ms_dmu, ksd, mean q: $ms_dmu  $ksd  $mean_q \n";
-    push @mean_qs, $mean_q;
+
+    for (my $i=3; $i<$n_dimensions+3; $i++) {
+      push @onedim_tvds, $cols[$i];
+      $rearranged_last_line .= $cols[$i] . "  "
+    }
+    print "$rearranged_last_line \n";
+   
   } # loop over reps
 #print "ms dmus: ", join("; ", @ms_dmus), "\n";
 #print mean(@ms_dmus), "  ", stddev(@ms_dmus), "\n";
-  printf("%8i %10.7fg ", $n_generations, $sig1);
+  printf("%8i %10.7g ", $n_generations, $sig1);
   printf("%10.7g +- %10.7g ", mean(@ndim_tvds), stddev(@ndim_tvds)/sqrt(scalar @ndim_tvds));
   printf("%10.7g +- %10.7g ", mean(@orthant_tvds), stddev(@orthant_tvds)/sqrt(scalar @orthant_tvds));
   printf("%10.7g +- %10.7g ", mean(@refl_tvds), stddev(@refl_tvds)/sqrt(scalar @refl_tvds));
   printf("%10.7g +- %10.7g ", mean(@onedim_tvds), stddev(@onedim_tvds)/sqrt(scalar @onedim_tvds));
 
+ printf("%10.7g +- %10.7g ", mean(@ksds), stddev(@ksds)/sqrt(scalar @ksds));
+  printf("%10.7g +- %10.7g ", mean(@mean_qs), stddev(@mean_qs)/sqrt(scalar @mean_qs));
+ 
+  printf("%10.7g +- %10.7g ", mean(@ms_dmus), stddev(@ms_dmus)/sqrt(scalar @ms_dmus));
   for (0..$n_dimensions-1) {
     printf("%10.7g +- %10.7g ", mean(@{$dmus{$_}}), stddev(@{$dmus{$_}})/sqrt(scalar @{$dmus{$_}}) );
   }
-  printf("%10.7g +- %10.7g ", mean(@ms_dmus), stddev(@ms_dmus)/sqrt(scalar @ms_dmus));
-  printf("%10.7g +- %10.7g ", mean(@mean_qs), stddev(@mean_qs)/sqrt(scalar @mean_qs));
-  printf("%10.7g +- %10.7g ", mean(@ksds), stddev(@ksds)/sqrt(scalar @ksds));
   print "\n\n";
 }
