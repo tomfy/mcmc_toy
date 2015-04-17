@@ -92,7 +92,7 @@ $proto_arg_string .= "$n_bins  $n_bins_1d  ";
 # $arg_string .= "25";  # n_bins
 
 #my $tvd_limit = 0.05 ;
-my $dmu_sq_limit_f = 0.01;
+my $dmu_sq_limit_f = 0.001;
 my $dmu_sq_limit;
 my $n_reps = 20;
 srand();
@@ -126,7 +126,7 @@ while (1) {
     }
   }
  $dmu_sq_limit = $dmu_sq_limit_f * $variance;
-print "mean, variance: $mean $variance dmusq: $dmusq\n";
+# print "mean, variance: $mean $variance dmusq: $dmusq\n";
 #exit;
 
   # my @mcmc_1d_tvds = @tvds[3 .. 3+$n_dimensions-1];
@@ -135,10 +135,10 @@ print "mean, variance: $mean $variance dmusq: $dmusq\n";
   $n_generations = int( 1.2*$n_generations*($dmusq/$dmu_sq_limit) );
 }
 #exit;
-my @sig_1s = (0.14, 0.20, 0.32, 0.5, 0.7, 1.0, 1.4, 2.0, 4.0, 7.0);
+my @sig_1s = (0.14, 0.20, 0.3, 0.45, 0.6, 0.8, 1.0, 1.2, 1.4, 1.7, 2.0, 4.0, 7.0);
 # @sig_1s = (0.2, 0.45, 0.7, 1.0, 1.4);
 # for ($sig1 = ; $sig1 < 5.0; $sig1 *= 1.3)
-# @sig_1s = (0.5, 0.7, 1.0);
+@sig_1s = (0.15, 0.45, 0.75, 1.5, 5.0);
 for my $sig_1 (@sig_1s) {
   trials($proto_arg_string, $n_reps, $n_generations, $sig_1, $n_dimensions);
 }
@@ -152,7 +152,7 @@ sub trials{
   my $the_arg_string = $proto_arg_string;
   $the_arg_string =~ s/NGENERATIONS/$n_generations/;
   $the_arg_string =~ s/SIGMA1/$sig1/;
-
+# print "FHFHFHF: ", $the_arg_string, "\n";
   #my @avg_effs = (0, 0, 0, 0);
 
   my @p_accepts = ();
