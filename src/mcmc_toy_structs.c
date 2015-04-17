@@ -144,38 +144,40 @@ void single_T_chain_histogram_current_state(Single_T_chain* chain){
   }
 }
 
-
 void single_T_chain_output_tvd(Single_T_chain* chain){
 
-  fprintf(g_tvd_vs_gen_fstream, "%8i  ", chain->generation);
+  fprintf(g_tvd_vs_gen_fstream, "%8i  %10.7g  ", chain->generation, (double)chain->n_accept/(double)chain->generation);
+   double dmusq = 0.0;
+      for(int i=0; i<chain->current_state->n_dimensions; i++){
+	double dmu = chain->sum_x[i]/chain->generation - g_targ_1d->mean; //  muhat - mu
+      dmusq += dmu*dmu; // get square of (muhat - mu) vector.
+    } 
+ double KSD;
+  double* all_mcmcgees = (double*)malloc(chain->generation*sizeof(double));
+  qsort(chain->recent_mcmcgees, chain->generation - chain->n_old_gees, sizeof(double), cmpfunc);
+  if(chain->old_mcmcgees == NULL){
+    all_mcmcgees = copy_array(chain->n_recent_gees, chain->recent_mcmcgees);
+  }else{
+    //   printf("%8i %8i %8i %8i\n",chain->n_recent_gees, chain->n_old_gees, chain->generation, chain->generation-chain->n_old_gees);
+    all_mcmcgees = merge_sorted_arrays(chain->n_old_gees, chain->old_mcmcgees, chain->generation - chain->n_old_gees, chain->recent_mcmcgees);
+				       // chain->n_recent_gees, chain->recent_mcmcgees);
+  }
+  KSD = Kolmogorov_smirnov_D_statistic_1_sample(chain->generation, all_mcmcgees, cdf);
+  fprintf(g_tvd_vs_gen_fstream, "%10.7g  %10.7g  %10.7g  ",  dmusq, KSD, chain->sum_q/chain->generation);
 
   //  fprintf(g_tvd_vs_gen_fstream, "%8.5f %8.5f %8.5f ", chain->proposal.W1, chain->proposal.W2, chain->proposal.p1);
   if(chain->mcmc_out_hist != NULL){
     double tvd = total_variation_distance(g_targprobs_ndim, chain->mcmc_out_hist);
-    fprintf(g_tvd_vs_gen_fstream, "%12.6g ", tvd);
+    fprintf(g_tvd_vs_gen_fstream, "%10.7g  ", tvd);
     tvd = total_variation_distance(g_targprobs_orthants, chain->mcmc_out_orthants_hist);
-    fprintf(g_tvd_vs_gen_fstream, "%12.6g ", tvd);
+    fprintf(g_tvd_vs_gen_fstream, "%10.7g  ", tvd);
     tvd = total_variation_distance(g_targprobs_one_orthant, chain->mcmc_out_reflected_hist);
-    fprintf(g_tvd_vs_gen_fstream, "%12.6g ", tvd);
+    fprintf(g_tvd_vs_gen_fstream, "%10.7g  ", tvd);
     for(int i=0; i<chain->current_state->n_dimensions; i++){
       tvd = total_variation_distance(g_targprobs_1dim, chain->mcmc_out_1d_hists[i]);
-      fprintf(g_tvd_vs_gen_fstream, "%12.6g ", tvd);
+      fprintf(g_tvd_vs_gen_fstream, "%10.7g ", tvd);
     }
-      for(int i=0; i<chain->current_state->n_dimensions; i++){
-	fprintf(g_tvd_vs_gen_fstream, "%12.6g ", chain->sum_x[i]/chain->generation); // output muhats
-    } 
-      fprintf(g_tvd_vs_gen_fstream, "%12.6g ", chain->sum_q/chain->generation); // output qhat
-
-  double mcmc_KSD_1s;
-  double* all_mcmcgees = (double*)malloc(chain->generation*sizeof(double));
-  qsort(chain->recent_mcmcgees, chain->n_recent_gees, sizeof(double), cmpfunc);
-  if(chain->old_mcmcgees == NULL){
-    all_mcmcgees = copy_array(chain->n_recent_gees, chain->recent_mcmcgees);
-  }else{
-    all_mcmcgees = merge_sorted_arrays(chain->n_old_gees, chain->old_mcmcgees, chain->n_recent_gees, chain->recent_mcmcgees);
   }
-  mcmc_KSD_1s = Kolmogorov_smirnov_D_statistic_1_sample(chain->generation, all_mcmcgees, cdf);
-  fprintf(g_tvd_vs_gen_fstream, " %12.6g ", mcmc_KSD_1s);
   fprintf(g_tvd_vs_gen_fstream, "\n");
 
   free(chain->old_mcmcgees);
@@ -185,7 +187,6 @@ void single_T_chain_output_tvd(Single_T_chain* chain){
   int next_n_recent_gees = (int)((SUMMARY_GEN_FACTOR - 1.0)*chain->n_old_gees);
   chain->n_recent_gees = next_n_recent_gees;
   chain->recent_mcmcgees = (double*)malloc(next_n_recent_gees*sizeof(double));
- }
 }
 
 
