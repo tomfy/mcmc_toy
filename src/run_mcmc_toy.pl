@@ -138,7 +138,7 @@ print "mean, variance: $mean $variance dmusq: $dmusq\n";
 my @sig_1s = (0.14, 0.20, 0.32, 0.5, 0.7, 1.0, 1.4, 2.0, 4.0, 7.0);
 # @sig_1s = (0.2, 0.45, 0.7, 1.0, 1.4);
 # for ($sig1 = ; $sig1 < 5.0; $sig1 *= 1.3)
-@sig_1s = (0.5, 0.7, 1.0);
+# @sig_1s = (0.5, 0.7, 1.0);
 for my $sig_1 (@sig_1s) {
   trials($proto_arg_string, $n_reps, $n_generations, $sig_1, $n_dimensions);
 }
