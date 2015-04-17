@@ -146,7 +146,7 @@ void single_T_chain_histogram_current_state(Single_T_chain* chain){
 
 void single_T_chain_output_tvd(Single_T_chain* chain){
 
-  fprintf(g_tvd_vs_gen_fstream, "%8i  %10.7g  ", chain->generation, (double)chain->n_accept/(double)chain->generation);
+  fprintf(g_tvd_vs_gen_fstream, "%8i  %8i  ", chain->generation, chain->n_accept);
    double dmusq = 0.0;
       for(int i=0; i<chain->current_state->n_dimensions; i++){
 	double dmu = chain->sum_x[i]/chain->generation - g_targ_1d->mean; //  muhat - mu
