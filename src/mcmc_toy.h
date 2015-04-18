@@ -47,6 +47,8 @@ double total_variation_distance(const Ndim_histogram* targprobs, const Ndim_hist
 double* merge_sorted_arrays(const int size1, const double* a1, const int size2, const double* a2);
 double Kolmogorov_smirnov_D_statistic_2_sample(const int size1, const double* a1, const int size2, const double* a2);
 double Kolmogorov_smirnov_D_statistic_1_sample(const int size1, const double* a1, double (*cdf)(double) );
+double anderson_darling_statistic1(const int size, const double* a, double (*cdf)(double) );
+double anderson_darling_statistic(const int size, const double* a, double (*cdf)(double) );
 double cdf(double y);
 int cmpfunc (const void * a, const void * b);
 double g(const State* s);

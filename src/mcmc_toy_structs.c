@@ -82,26 +82,26 @@ State* single_T_chain_mcmc_step(Single_T_chain* chain){
   double dsq = 0;
   // prop ratio is 1 for symmetric proposal
   if(strcmp(chain->type, "mcmc") == 0){ // mcmc step
-  if((p_of_proposed_state > p_of_current_state) || (p_of_proposed_state > drand() * p_of_current_state)){ // accept
-    double h0max = 0.0;   // count if jumped from < 0.5 to > 0.5 in x and y
-    for(int i=0; i<Ndim; i++){
-      if( ( the_state->point[i] <= h0max  && prop_x_array[i] > h0max ) 
-	  || ( the_state->point[i] > h0max  &&  prop_x_array[i] <= h0max ) ){ 
-	n_jumps++;
+    if((p_of_proposed_state > p_of_current_state) || (p_of_proposed_state > drand() * p_of_current_state)){ // accept
+      double h0max = 0.0;   // count if jumped from < 0.5 to > 0.5 in x and y
+      for(int i=0; i<Ndim; i++){
+	if( ( the_state->point[i] <= h0max  && prop_x_array[i] > h0max ) 
+	    || ( the_state->point[i] > h0max  &&  prop_x_array[i] <= h0max ) ){ 
+	  n_jumps++;
+	}
+	double d = the_state->point[i] - prop_x_array[i];
+	dsq += d*d;
       }
-      double d = the_state->point[i] - prop_x_array[i];
-      dsq += d*d;
+      // set state to the proposed state:
+      free(the_state->point); 
+      the_state->point = prop_x_array;
+      the_state->prob = p_of_proposed_state;
+      chain->n_accept++;
+    }else{ 
+      // reject proposed move. // dsq += 0 , n_jumps += 0
+      chain->n_reject++;
+      free(prop_x_array);
     }
-    // set state to the proposed state:
-    free(the_state->point); 
-    the_state->point = prop_x_array;
-    the_state->prob = p_of_proposed_state;
-    chain->n_accept++;
-  }else{ 
-    // reject proposed move. // dsq += 0 , n_jumps += 0
-    chain->n_reject++;
-    free(prop_x_array);
-  }
   }else{ // do iid draw
     double* exact_xs = draw_ndim(Ndim, g_targ_1d);
     for(int i=0; i<Ndim; i++){
@@ -147,12 +147,13 @@ void single_T_chain_histogram_current_state(Single_T_chain* chain){
 void single_T_chain_output_tvd(Single_T_chain* chain){
 
   fprintf(g_tvd_vs_gen_fstream, "%8i  %8i  ", chain->generation, chain->n_accept);
-   double dmusq = 0.0;
-      for(int i=0; i<chain->current_state->n_dimensions; i++){
-	double dmu = chain->sum_x[i]/chain->generation - g_targ_1d->mean; //  muhat - mu
-      dmusq += dmu*dmu; // get square of (muhat - mu) vector.
-    } 
- double KSD;
+
+  double dmusq = 0.0;
+  for(int i=0; i<chain->current_state->n_dimensions; i++){
+    double dmu = chain->sum_x[i]/chain->generation - g_targ_1d->mean; //  muhat - mu
+    dmusq += dmu*dmu; // get square of (muhat - mu) vector.
+  } 
+
   double* all_mcmcgees = (double*)malloc(chain->generation*sizeof(double));
   qsort(chain->recent_mcmcgees, chain->generation - chain->n_old_gees, sizeof(double), cmpfunc);
   if(chain->old_mcmcgees == NULL){
@@ -160,10 +161,14 @@ void single_T_chain_output_tvd(Single_T_chain* chain){
   }else{
     //   printf("%8i %8i %8i %8i\n",chain->n_recent_gees, chain->n_old_gees, chain->generation, chain->generation-chain->n_old_gees);
     all_mcmcgees = merge_sorted_arrays(chain->n_old_gees, chain->old_mcmcgees, chain->generation - chain->n_old_gees, chain->recent_mcmcgees);
-				       // chain->n_recent_gees, chain->recent_mcmcgees);
+    // chain->n_recent_gees, chain->recent_mcmcgees);
   }
-  KSD = Kolmogorov_smirnov_D_statistic_1_sample(chain->generation, all_mcmcgees, cdf);
-  fprintf(g_tvd_vs_gen_fstream, "%10.7g  %10.7g  %10.7g  ",  dmusq, KSD, chain->sum_q/chain->generation);
+  double KSD =   // anderson_darling_statistic2(chain->generation, all_mcmcgees, cdf);
+    Kolmogorov_smirnov_D_statistic_1_sample(chain->generation, all_mcmcgees, cdf);
+  double ADS = anderson_darling_statistic(chain->generation, all_mcmcgees, cdf);
+
+  fprintf(g_tvd_vs_gen_fstream, "%10.7g  %10.7g  %10.7g  %10.7g  ",  
+	  dmusq, KSD, ADS, chain->sum_q/chain->generation);
 
   //  fprintf(g_tvd_vs_gen_fstream, "%8.5f %8.5f %8.5f ", chain->proposal.W1, chain->proposal.W2, chain->proposal.p1);
   if(chain->mcmc_out_hist != NULL){
@@ -196,7 +201,7 @@ void free_single_T_chain(Single_T_chain* chain){
   if(DO_TVD){ free(chain->old_mcmcgees); free(chain->recent_mcmcgees); }
   free(chain);
   
-  }
+}
 
 // Multi_T_chain
 Multi_T_chain* construct_multi_T_chain(int n_temperatures, double* temperatures, Proposal* proposals, State** states, const Binning_spec_set* bins, const char* type){
@@ -237,11 +242,11 @@ void multi_T_chain_within_T_mcmc_step(Multi_T_chain* multi_T_chain){
       int j = chain->generation - chain->n_old_gees - 1; // (chain->generation - 1) % TVD_EVERY;
       
       chain->recent_mcmcgees[j] = g(chain->current_state);
-   //   printf("FRED j: %i %i %g \n", chain->n_recent_gees, j, chain->recent_mcmcgees[j]);	
-	if(chain->generation == chain->n_old_gees + chain->n_recent_gees){ // multi_T_chain->next_summary_generation){  // %TVD_EVERY == 0){	 
-	  //	  printf("about to call output_tvd...\n");
-	  single_T_chain_output_tvd(chain);
-	} // if gen % TVD_EVERY == 0
+      //   printf("FRED j: %i %i %g \n", chain->n_recent_gees, j, chain->recent_mcmcgees[j]);	
+      if(chain->generation == chain->n_old_gees + chain->n_recent_gees){ // multi_T_chain->next_summary_generation){  // %TVD_EVERY == 0){	 
+	//	  printf("about to call output_tvd...\n");
+	single_T_chain_output_tvd(chain);
+      } // if gen % TVD_EVERY == 0
          
     }
     free(exact_xs);
@@ -249,9 +254,9 @@ void multi_T_chain_within_T_mcmc_step(Multi_T_chain* multi_T_chain){
 }
 
 void multi_T_chain_output_tvd(Multi_T_chain* multi_T_chain){
-for(int i=0; i<multi_T_chain->n_temperatures; i++){
-  single_T_chain_output_tvd(multi_T_chain->coupled_chains[i]);
- }
+  for(int i=0; i<multi_T_chain->n_temperatures; i++){
+    single_T_chain_output_tvd(multi_T_chain->coupled_chains[i]);
+  }
 }
 
 void free_multi_T_chain(Multi_T_chain* chain){
@@ -368,8 +373,8 @@ double set_ndim_array_of_double_to_target(Ndim_array_of_double* array_struct,
       for(int j=0; j<targ_1d->n_modes; j++){
 	bin_prob += 
 	  peaks[j].weight * (gsl_cdf_gaussian_P(bin_boundaries[i+1]-peaks[j].position, peaks[j].sigma) 
-			   - gsl_cdf_gaussian_P(bin_boundaries[i]-peaks[j].position, peaks[j].sigma) );
-  };
+			     - gsl_cdf_gaussian_P(bin_boundaries[i]-peaks[j].position, peaks[j].sigma) );
+      };
       //printf("i, binboundaries[i],[i+1], bin_prob: %i %12.5g  %12.5g  %12.5g \n", i, bin_boundaries[i], bin_boundaries[i+1], bin_prob);
 
       double innermost_value =  outer_value*bin_prob;
@@ -381,17 +386,17 @@ double set_ndim_array_of_double_to_target(Ndim_array_of_double* array_struct,
     //    printf("Ndim: %i \n", Ndim);
     for(int i=0; i<Nsize; i++){  
       double bin_prob = 0.0; 
-for(int j=0; j<targ_1d->n_modes; j++){
+      for(int j=0; j<targ_1d->n_modes; j++){
 	bin_prob += 
-	peaks[j].weight * (gsl_cdf_gaussian_P(bin_boundaries[i+1]-peaks[j].position, peaks[j].sigma) 
-			   - gsl_cdf_gaussian_P(bin_boundaries[i]-peaks[j].position, peaks[j].sigma) );
-  };
+	  peaks[j].weight * (gsl_cdf_gaussian_P(bin_boundaries[i+1]-peaks[j].position, peaks[j].sigma) 
+			     - gsl_cdf_gaussian_P(bin_boundaries[i]-peaks[j].position, peaks[j].sigma) );
+      };
 
 
-/* gsl_cdf_gaussian_P(bin_boundaries[i+1]-peaks[0].position, peaks[0].sigma)  */
-/* 	- gsl_cdf_gaussian_P(bin_boundaries[i]-peaks[0].position, peaks[0].sigma) */
-/* 	+ gsl_cdf_gaussian_P(bin_boundaries[i+1]-peaks[1].position, peaks[1].sigma)  */
-/* 	- gsl_cdf_gaussian_P(bin_boundaries[i]-peaks[1].position, peaks[1].sigma); */
+      /* gsl_cdf_gaussian_P(bin_boundaries[i+1]-peaks[0].position, peaks[0].sigma)  */
+      /* 	- gsl_cdf_gaussian_P(bin_boundaries[i]-peaks[0].position, peaks[0].sigma) */
+      /* 	+ gsl_cdf_gaussian_P(bin_boundaries[i+1]-peaks[1].position, peaks[1].sigma)  */
+      /* 	- gsl_cdf_gaussian_P(bin_boundaries[i]-peaks[1].position, peaks[1].sigma); */
       // double bin_prob = gsl_cdf_gaussian_P(bin_boundaries[i+1], peaks[0].sigma) - gsl_cdf_gaussian_P(bin_boundaries[i], peaks[0].sigma)
       //	+ gsl_cdf_gaussian_P(bin_boundaries[i+1], peaks[1].sigma) - gsl_cdf_gaussian_P(bin_boundaries[i], peaks[1].sigma);
       //qprintf("i, binboundaries[i],[i+1], bin_prob: %i %12.5g  %12.5g  %12.5g \n", i, bin_boundaries[i], bin_boundaries[i+1], bin_prob);
@@ -599,7 +604,7 @@ Binning_spec* construct_binning_spec_old(int n_bins, const Target_1dim* targ_1d)
       - gsl_cdf_gaussian_P(bin_boundaries[i-1]-position, sig); 
     //  printf("# %6i  %12.7g  %12.7g  %12.7g  %12.7g\n", i, bin_boundaries[i], p, p_this_bin, f_1dim(bin_boundaries[i]));
     printf("# %6i  %12.7g  %12.7g  %12.7g  %12.7g\n", i-1, bin_boundaries[i-1], bin_boundaries[i], 
-	    p_this_bin, f_1dim(targ_1d, bin_boundaries[i]) );
+	   p_this_bin, f_1dim(targ_1d, bin_boundaries[i]) );
     p += pinc; // 2*pinc;
   }
   bin_boundaries[Nmiddle] = xmid;

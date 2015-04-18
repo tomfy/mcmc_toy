@@ -94,10 +94,10 @@ $proto_arg_string .= "$n_bins  $n_bins_1d  ";
 #my $tvd_limit = 0.05 ;
 my $dmu_sq_limit_f = 0.001;
 my $dmu_sq_limit;
-my $n_reps = 20;
+my $n_reps = 25;
 srand();
 
-my $sig1 = 0.75;
+my $sig1 = 1.0;
 my $the_arg_string;
 while (1) {
   $the_arg_string = $proto_arg_string;
@@ -139,6 +139,12 @@ my @sig_1s = (0.14, 0.20, 0.3, 0.45, 0.6, 0.8, 1.0, 1.2, 1.4, 1.7, 2.0, 4.0, 7.0
 # @sig_1s = (0.2, 0.45, 0.7, 1.0, 1.4);
 # for ($sig1 = ; $sig1 < 5.0; $sig1 *= 1.3)
 @sig_1s = (0.15, 0.45, 0.75, 1.5, 5.0);
+@sig_1s = (0.15, 0.25, 0.5, 0.8, 1.0, 1.25, 1.6, 2.3, 3.8, 7.0);
+@sig_1s = (0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4);
+@sig_1s = (0.55, 0.7, 0.9, 1.1, 1.3, 1.6, 2.0, 5.0);
+@sig_1s = (3.0, 4.0, 7.0);
+
+@sig_1s = (0.128, 0.164, 0.2, 0.256, 0.328, 0.4, 0.512, 0.676, 0.8, 1.0, 1.28, 1.64, 2.0, 3.28, 4.0, 5.12, 6.76, 8.0);
 for my $sig_1 (@sig_1s) {
   trials($proto_arg_string, $n_reps, $n_generations, $sig_1, $n_dimensions);
 }
@@ -155,15 +161,22 @@ sub trials{
 # print "FHFHFHF: ", $the_arg_string, "\n";
   #my @avg_effs = (0, 0, 0, 0);
 
-  my @p_accepts = ();
+  my @n_accepts = ();
   my @ms_dmus = ();
   my @ksds = ();
+  my @adss = ();
   my @mean_qs = ();
 
   my @ndim_tvds = ();
   my @orthant_tvds = ();
   my @refl_tvds = ();
   my @onedim_tvds = ();
+
+  my %gen_avgdmusq = ();
+my %gen_avgksd = ();
+my %gen_avgads = ();
+my %gen_avgorthtvd = ();
+my %gen_avg1dimtvd = ();
  
   #  my $mu = 0.0; # get from run_params file - may not always be zero!
   my %dmus = (); # $dmus{$i} is array_ref to array of dmus for component $i
@@ -181,43 +194,71 @@ sub trials{
     # 	($T, $shape, $s1, $s2, $p1) = ($1, $2, $3, $4, $5);
     #       }
     #     }
+my ($n_gens, $n_accept, $dmu_sq, $ksd, $ads, $mean_q, $ndim_tvd, $orthant_tvd, $refl_tvd, $oned_tvd);
+    my $tvd_vs_gen_string = `cat tvd_vs_gen`;
+    my @tvd_vs_gen_lines = split("\n", $tvd_vs_gen_string);
+my @cols;
+    for(@tvd_vs_gen_lines){
+      @cols = split(" ", $_);
+      ($n_gens, $n_accept, $dmu_sq, $ksd, $ads, $mean_q, $ndim_tvd, $orthant_tvd, $refl_tvd, $oned_tvd) = @cols[0..9];
+      $gen_avgdmusq{$n_gens} += $dmu_sq;
+      $gen_avgksd{$n_gens} += $ksd;
+ $gen_avgads{$n_gens} += $ads;
+      $gen_avgorthtvd{$n_gens} += $orthant_tvd;
+      $gen_avg1dimtvd{$n_gens} += $cols[8];
+    }
 
-    my $last_line = `tail -1 tvd_vs_gen`;
-  #  print $last_line;
-    my @cols = split(" ", $last_line);
+  #   my $last_line = `tail -1 tvd_vs_gen`;
+  # #  print $last_line;
+  #   my @cols = split(" ", $last_line);
 
-    my $n_gens = shift @cols;
+#    my $n_gens = shift @cols;
     print "$n_gens  $sig1  ", join("  ", @cols), "\n"; 
     die "n generations inconsistency: $n_generations, $n_gens \n" if($n_gens != $n_generations);
-    my $p_accept = shift @cols;
-    push @p_accepts, $p_accept;
-    my $dmu_sq = shift @cols;
+  #  my $p_accept = shift @cols;
+    push @n_accepts, $n_accept;
+ #   my $dmu_sq = shift @cols;
     push @ms_dmus, $dmu_sq;
-    my $ksd = shift @cols;
+
+  #  my $ksd = shift @cols;
     push @ksds, $ksd;
-    my $mean_q = shift @cols;
+#  my $ads = shift @cols;
+    push @adss, $ads;
+  #  my $mean_q = shift @cols;
     push @mean_qs, $mean_q;
     #print "ms_dmu, ksd, mean q: $ms_dmu  $ksd  $mean_q \n";
 
-    my $ndim_tvd = shift @cols;
+  #  my $ndim_tvd = shift @cols;
     push @ndim_tvds, $ndim_tvd;
-    my $orthant_tvd = shift @cols;
+ #   my $orthant_tvd = shift @cols;
     push @orthant_tvds, $orthant_tvd;
-    my $refl_tvd = shift @cols;
+ #   my $refl_tvd = shift @cols;
     push @refl_tvds, $refl_tvd;
 
-    for (my $i=0; $i<$n_dimensions; $i++) {
-      my $oned_tvd = shift @cols;
-      push @onedim_tvds, $oned_tvd;
-    }
+push @onedim_tvds, $oned_tvd;
+    # for (my $i=0; $i<$n_dimensions; $i++) {
+    #   my $oned_tvd = shift @cols;
+    #   push @onedim_tvds, $oned_tvd;
+    # }
    
   }		  # loop over reps
+open my $fh1, ">", "avg_nreps_tvdetc_vs_gen_sig1_" . $sig1;
+my @sgens = sort {$a <=> $b} keys %gen_avgdmusq;
+
+  for(@sgens){
+    printf $fh1 "%8i %10.7g %10.7g %10.7g %10.7g %10.7g \n", $_,
+      $gen_avgdmusq{$_}/$n_reps, $gen_avgksd{$_}/$n_reps, $gen_avgads{$_}/$n_reps,
+      $gen_avgorthtvd{$_}/$n_reps, $gen_avg1dimtvd{$_}/$n_reps;
+  }
+close $fh1;
+
   #print "ms dmus: ", join("; ", @ms_dmus), "\n";
   #print mean(@ms_dmus), "  ", stddev(@ms_dmus), "\n";
   printf("%8i %10.7g ", $n_generations, $sig1);
-  printf("%10.7g +- %10.7g ", mean(@p_accepts), stddev(@p_accepts)/sqrt(scalar @p_accepts));
-  printf("%10.7g +- %10.7g ", mean(@ksds), stddev(@ksds)/sqrt(scalar @ksds));
+  printf("%10.7g +- %10.7g ", mean(@n_accepts)/$n_generations, stddev(@n_accepts)/$n_generations/sqrt(scalar @n_accepts));
   printf("%10.7g +- %10.7g ", mean(@ms_dmus), stddev(@ms_dmus)/sqrt(scalar @ms_dmus));
+ printf("%10.7g +- %10.7g ", mean(@ksds), stddev(@ksds)/sqrt(scalar @ksds));
+ printf("%10.7g +- %10.7g ", mean(@adss), stddev(@adss)/sqrt(scalar @adss));
   printf("%10.7g +- %10.7g ", mean(@mean_qs), stddev(@mean_qs)/sqrt(scalar @mean_qs));
 
   printf("%10.7g +- %10.7g ", mean(@ndim_tvds), stddev(@ndim_tvds)/sqrt(scalar @ndim_tvds));

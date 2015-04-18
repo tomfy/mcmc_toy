@@ -454,6 +454,32 @@ double Kolmogorov_smirnov_D_statistic_1_sample(const int size1, const double* a1
   return D;
 }
 
+double anderson_darling_statistic(const int size, const double* a, double (*cdf)(double) ){
+  // calculates the 1-sample KSD statistic for the the sample stored in array a, compared
+  // to the cdf specified by the function argument.
+   double d = 1.0/(double)size;
+  double result = 0.0;
+  for(int i=0; i < size; i++){
+    double F_0 = cdf(a[i]); 
+    double delta = (i+1)*d - F_0;
+    result += delta*delta/(F_0*(1.0 - F_0));
+  }
+  return result;
+}
+
+// getting some negative outputs with the following - rounding error? use above version
+double anderson_darling_statistic1(const int size, const double* a, double (*cdf)(double) ){
+  // calculates the 1-sample anderson-darling statistic for the the sample stored in array a, compared
+  // to the cdf specified by the function argument.
+  double sum = 0.0;
+  for(int j=1, jj=size; j <= size; j++, jj--){
+    double u_j = cdf(a[j-1]); 
+    double u_jj = cdf(a[jj-1]);
+    sum += (2*j-1)*(log(u_j) + log(1.0 - u_jj));
+  }
+  return -1.0 - sum/(double)(size*size); // this is really A_n/n , should go like 1/n
+}
+
 double g(const State* s){
   int n_dim = s->n_dimensions;
   return s->point[0]; // just return 0th component for now
