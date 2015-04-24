@@ -49,6 +49,7 @@ typedef struct {
 } Target_peak_1dim;
 
 typedef struct {
+  int normalized; // 1 if has been normalized to sum(weights) = 1
   int n_modes;
   Target_peak_1dim* peaks;
   double mean;
@@ -78,37 +79,41 @@ typedef struct
   State* current_state;
   double* sum_x; // sum over generations of point vector
   double sum_q; // sum of g_shortrange (i.e +- 1, changing at each peak
+  double sum_p; // sum of state prob densities
   double temperature;
   int generation;
+  int n_try;
   int n_accept;
-  int n_reject;
+  //  int n_reject;
+  int n_try_1; // 1st component of proposal
+  int n_try_2;
+  int n_accept_1;
+  int n_accept_2;
   double dsq_sum;
   int n_jumps;
   Proposal proposal; // each T can have its own proposal
   
   Ndim_histogram* mcmc_out_hist;
-  Ndim_histogram** mcmc_out_1d_hists; // for n_dim > 2, do n_dim 2d histograms
+  Ndim_histogram* mcmc_out_1d0_hist; // 1dim, 0th component, 
+  Ndim_histogram* mcmc_out_1dall_hist; // 1dim, all components
   Ndim_histogram* mcmc_out_orthants_hist; // 1 bin for each orthant.
   Ndim_histogram* mcmc_out_reflected_hist; // pts reflected into all-positive orthant
 
-  /* Ndim_histogram* exact_draw_hist; */
-  /* Ndim_histogram** exact_draw_1d_hists; // for n_dim > 2, do n_dim 2d histograms */
-  /* Ndim_histogram* exact_draw_orthants_hist; // 1 bin for each orthant (i.e. n_bin = 2, each dimension if weights equal) */
-  /* Ndim_histogram* exact_draw_reflected_hist; // pts reflected into all-positive orthant */
   int n_old_gees;
   int n_recent_gees;
   double* old_mcmcgees; // for now just holds the zeroth components of all the points.
   double* recent_mcmcgees; 
-  /* double* old_iidgees; */
-  /* double* recent_iidgees; */
+  //  Multi_T_chain* parent_multi_T_chain;
 } Single_T_chain;
 
 typedef struct
 {
   int n_temperatures;
+  int generation;
   Single_T_chain** coupled_chains; // array of metropolis-coupled chains at different T's
   int summary_generation; // tvd, ksd have been done up through this generation
   int next_summary_generation; // tvd, ksd will next be done after this generation
+  int count_within_T_updates; 
 } Multi_T_chain;
 
 typedef struct
@@ -121,7 +126,7 @@ typedef struct
 
 // State
 //State* construct_state(int n_dimensions); //, Target_distribution* targp);
-State* construct_state(int n_dimensions, const Target_1dim* targ_1d); 
+State* construct_state(int n_dimensions, const Target_1dim* targ_1d, double temperature); 
 void free_state(State* s);
 
 // Single_T_chain
@@ -133,7 +138,7 @@ void free_single_T_chain(Single_T_chain* chain);
 // Multi_T_chain
 Multi_T_chain* construct_multi_T_chain(int n_temperatures, double* temperatures, Proposal* proposals, State** states, const Binning_spec_set* bins, const char* type);
 void multi_T_chain_within_T_mcmc_step(Multi_T_chain* multi_T_chain);
-void multi_T_chain_T_swap_mcmc_step(Multi_T_chain* multi_T_chain);
+void multi_T_chain_T_swap_mcmc_step(Multi_T_chain* multi_T_chain, int i_c, int i_h);
 void multi_T_chain_output_tvd(Multi_T_chain* multi_T_chain);
 void free_multi_T_chain(Multi_T_chain* chain);
 // Ndim_histogram
@@ -149,7 +154,7 @@ void* free_ndim_histogram(Ndim_histogram* h);
 // Ndim_array_of_double
 Ndim_array_of_double* construct_ndim_array_of_double(int Ndim, int Nsize, double init_value);
 Ndim_array_of_double* construct_copy_ndim_array_of_double(Ndim_array_of_double* A);
-double* get_pointer_to_element(Ndim_array_of_double* A, int* index_array);
+double* get_pointer_to_double_element(Ndim_array_of_double* A, int* index_array);
 double sum_ndim_array_of_double(Ndim_array_of_double* array_struct);
 double set_ndim_array_of_double_with_function(Ndim_array_of_double* array_struct,
 						     double outer_value, double_func_ptr function);
@@ -164,6 +169,7 @@ void free_ndim_array_of_double(Ndim_array_of_double* A);
 
 // Ndim_array_of_int
 Ndim_array_of_int* construct_ndim_array_of_int(int Ndim, int Nsize, int init_value);
+int* get_pointer_to_int_element(Ndim_array_of_int* A, int* index_array);
 
 // Target_1dim 
 Target_1dim* construct_target_1dim(int n_peaks, Target_peak_1dim* peaks);

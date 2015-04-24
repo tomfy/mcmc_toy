@@ -12,17 +12,17 @@
 // these are the functions that go with the structs in structs.h
 
 // construct a state
-State* construct_state(int n_dimensions, const Target_1dim* targ_1d){ 
+State* construct_state(int n_dimensions, const Target_1dim* targ_1d, double temperature){ 
   State* the_state = (State*)malloc(sizeof(State));
   the_state->n_dimensions = n_dimensions;
   //  the_state->ipoint = (int*)malloc(n_dimensions*sizeof(int));
   the_state->point = (double*)malloc(n_dimensions*sizeof(double));
   for(int i=0; i<n_dimensions; i++){
     //  the_state->ipoint[i] = (int)( drand() * (Ngrid_max+1) ); 
-    the_state->point = draw_ndim(n_dimensions, targ_1d); // draw from target distribution
+    the_state->point = draw_ndim(n_dimensions, targ_1d, temperature); // draw from target distribution
     // [i] = (double)( drand() * 1.0);
   }
-  the_state->prob = F(targ_1d, n_dimensions, the_state->point);
+  the_state->prob = f_ndim(targ_1d, n_dimensions, the_state->point);
   return the_state;
 }
 
@@ -40,18 +40,30 @@ Single_T_chain* construct_single_T_chain(double T, Proposal P, State* S, const B
   // single_T_chain->current_iid_state = construct_state(S->n_dimensions, g_targ_1d);
   single_T_chain->temperature = T;
   single_T_chain->generation = 0;
+  single_T_chain->n_try = 0;
+  single_T_chain->n_accept = 0;
+  //  single_T_chain->n_reject = 0;
+  single_T_chain->n_try_1 = 0;
+  single_T_chain->n_try_2 = 0;
+  single_T_chain->n_accept_1 = 0;
+  single_T_chain->n_accept_2 = 0;
   single_T_chain->proposal = P;
   single_T_chain->dsq_sum = 0.0;
   single_T_chain->n_jumps = 1;
   single_T_chain->type = type;
   //   single_T_chain->bins = bins;
-  if(DO_TVD){
+  // if(DO_TVD){
     single_T_chain->mcmc_out_hist = construct_ndim_histogram(S->n_dimensions, bins->ndim_bins);
     //  single_T_chain->mcmc_out_hist->bins = bins;
-    single_T_chain->mcmc_out_1d_hists = (Ndim_histogram**)malloc(S->n_dimensions*sizeof(Ndim_histogram*));
-    for(int i=0; i<S->n_dimensions; i++){
-      single_T_chain->mcmc_out_1d_hists[i] = construct_ndim_histogram(1, bins->onedim_bins);
-    }
+    //single_T_chain->mcmc_out_1d_hists = (Ndim_histogram**)malloc(S->n_dimensions*sizeof(Ndim_histogram*));
+    /* for(int i=0; i<S->n_dimensions; i++){ */
+    /*   single_T_chain->mcmc_out_1d_hists[i] = construct_ndim_histogram(1, bins->onedim_bins); */
+    /* } */
+    // Ndim_histogram* mcmc_out_1d0_hist; // 1dim, 0th component, 
+    // Ndim_histogram* mcmc_out_1dall_hist; // 1dim, all components
+   single_T_chain->mcmc_out_1d0_hist = construct_ndim_histogram(1, bins->onedim_bins);
+single_T_chain->mcmc_out_1dall_hist = construct_ndim_histogram(1, bins->onedim_bins);
+
     single_T_chain->mcmc_out_orthants_hist = construct_ndim_histogram(S->n_dimensions, bins->orthants_bins);
     single_T_chain->mcmc_out_reflected_hist = construct_ndim_histogram(S->n_dimensions, bins->positive_bins);
   
@@ -62,7 +74,7 @@ Single_T_chain* construct_single_T_chain(double T, Proposal P, State* S, const B
     single_T_chain->recent_mcmcgees = (double*)malloc(FIRST_SUMMARY_GEN*sizeof(double));
     //single_T_chain->old_iidgees = NULL;
     //  single_T_chain->recent_iidgees = (double*)malloc(FIRST_SUMMARY_GEN*sizeof(double));
-  }
+    // }
   return single_T_chain;
 }
 
@@ -72,17 +84,19 @@ State* single_T_chain_mcmc_step(Single_T_chain* chain){
   double inverse_T = 1.0/chain->temperature;
   
   double* x_array = the_state->point;
-  double p_of_current_state = pow( the_state->prob, inverse_T );
+  double p_of_current_state_T = pow( the_state->prob, inverse_T ); // the_state->prob is the T=1 prob.
 
   Proposal prop = chain->proposal;
-  double* prop_x_array = propose(Ndim, x_array, &prop);
-  double p_of_proposed_state = pow( F(g_targ_1d, Ndim, prop_x_array), inverse_T );
+  int which_prop; // 1 or 2
+  double* prop_x_array = propose(Ndim, x_array, &prop, &which_prop);
+  double p_of_proposed_state = f_ndim(g_targ_1d, Ndim, prop_x_array);
+  double p_of_proposed_state_T = pow( p_of_proposed_state, inverse_T );
 
   int n_jumps = 0;
   double dsq = 0;
   // prop ratio is 1 for symmetric proposal
   if(strcmp(chain->type, "mcmc") == 0){ // mcmc step
-    if((p_of_proposed_state > p_of_current_state) || (p_of_proposed_state > drand() * p_of_current_state)){ // accept
+    if((p_of_proposed_state_T > p_of_current_state_T) || (p_of_proposed_state_T > drand() * p_of_current_state_T)){ // accept
       double h0max = 0.0;   // count if jumped from < 0.5 to > 0.5 in x and y
       for(int i=0; i<Ndim; i++){
 	if( ( the_state->point[i] <= h0max  && prop_x_array[i] > h0max ) 
@@ -97,13 +111,14 @@ State* single_T_chain_mcmc_step(Single_T_chain* chain){
       the_state->point = prop_x_array;
       the_state->prob = p_of_proposed_state;
       chain->n_accept++;
+      if(which_prop == 1){ chain->n_accept_1++; }else{ chain->n_accept_2++; }
     }else{ 
       // reject proposed move. // dsq += 0 , n_jumps += 0
-      chain->n_reject++;
+      //   chain->n_reject++;
       free(prop_x_array);
     }
   }else{ // do iid draw
-    double* exact_xs = draw_ndim(Ndim, g_targ_1d);
+    double* exact_xs = draw_ndim(Ndim, g_targ_1d, chain->temperature);
     for(int i=0; i<Ndim; i++){
       double d = the_state->point[i] - exact_xs[i];
       dsq += d*d;
@@ -111,14 +126,17 @@ State* single_T_chain_mcmc_step(Single_T_chain* chain){
 	
     free(the_state->point);
     the_state->point = exact_xs;
-    the_state->prob = pow( F(g_targ_1d, Ndim, exact_xs), inverse_T );
+    the_state->prob = f_ndim(g_targ_1d, Ndim, exact_xs);
     chain->n_accept++;
   }
   add_arrays(Ndim, chain->sum_x, the_state->point);
   chain->sum_q += g_shortrange(the_state);
+  chain->sum_p += the_state->prob; 
   chain->dsq_sum += dsq;
   chain->n_jumps += n_jumps;
   chain->generation++;
+  chain->n_try++; 
+  if(which_prop == 1){ chain->n_try_1++; }else{ chain->n_try_2++; }
   chain->current_state = the_state;
   //  fprintf(stderr, "geneartions: %i \n", chain->generation);
   return the_state;
@@ -138,16 +156,35 @@ void single_T_chain_histogram_current_state(Single_T_chain* chain){
     }
     add_data_pt_to_ndim_histogram(chain->mcmc_out_reflected_hist, n_dim, reflected_point);
     free(reflected_point);
+    add_data_pt_to_ndim_histogram(chain->mcmc_out_1d0_hist, 1, the_state->point); // zeroth component
     for(int i=0; i<n_dim; i++){
-      add_data_pt_to_ndim_histogram(chain->mcmc_out_1d_hists[i], 1, the_state->point+i);
+      add_data_pt_to_ndim_histogram(chain->mcmc_out_1dall_hist, 1, the_state->point+i);
     }
   }
 }
 
 void single_T_chain_output_tvd(Single_T_chain* chain){
 
-  fprintf(g_tvd_vs_gen_fstream, "%8i  %8i  ", chain->generation, chain->n_accept);
+  fprintf(g_tvd_vs_gen_fstream, "%8i %8i %8i %8ld  ", chain->generation, chain->n_try, chain->n_accept, g_n_pi_evaluations);
 
+  // tvds cols 5-9
+ if(chain->mcmc_out_hist != NULL){
+    double tvd = total_variation_distance(g_targprobs_ndim, chain->mcmc_out_hist);
+    fprintf(g_tvd_vs_gen_fstream, "%10.7g  ", tvd);
+    tvd = total_variation_distance(g_targprobs_orthants, chain->mcmc_out_orthants_hist);
+    fprintf(g_tvd_vs_gen_fstream, "%10.7g  ", tvd);
+    tvd = total_variation_distance(g_targprobs_one_orthant, chain->mcmc_out_reflected_hist);
+    fprintf(g_tvd_vs_gen_fstream, "%10.7g  ", tvd);
+    //  for(int i=0; i<chain->current_state->n_dimensions; i++){
+    tvd = total_variation_distance(g_targprobs_1dim, chain->mcmc_out_1d0_hist);
+      fprintf(g_tvd_vs_gen_fstream, "%10.7g ", tvd);
+      tvd = total_variation_distance(g_targprobs_1dim, chain->mcmc_out_1dall_hist);
+      fprintf(g_tvd_vs_gen_fstream, "%10.7g ", tvd);
+				     // }
+  }
+
+
+ // dmusq, KSD, EDFS, pow(chain->sum_q/chain->generation, 2.0), chain->sum_p/chain->generation
   double dmusq = 0.0;
   for(int i=0; i<chain->current_state->n_dimensions; i++){
     double dmu = chain->sum_x[i]/chain->generation - g_targ_1d->mean; //  muhat - mu
@@ -165,24 +202,27 @@ void single_T_chain_output_tvd(Single_T_chain* chain){
   }
   double KSD =   // anderson_darling_statistic2(chain->generation, all_mcmcgees, cdf);
     Kolmogorov_smirnov_D_statistic_1_sample(chain->generation, all_mcmcgees, cdf);
-  double ADS = anderson_darling_statistic(chain->generation, all_mcmcgees, cdf);
-
-  fprintf(g_tvd_vs_gen_fstream, "%10.7g  %10.7g  %10.7g  %10.7g  ",  
-	  dmusq, KSD, ADS, chain->sum_q/chain->generation);
+  //  double ADS = anderson_darling_statistic(chain->generation, all_mcmcgees, cdf);
+  double EDFS = edf_statistic(chain->generation, all_mcmcgees, cdf);
+  // cols 10-14
+  fprintf(g_tvd_vs_gen_fstream, "%10.7g  %10.7g  %10.7g  %10.7g  %10.7g  ",  
+	  dmusq, KSD, EDFS, pow(chain->sum_q/chain->generation, 2.0), chain->sum_p/chain->generation);
 
   //  fprintf(g_tvd_vs_gen_fstream, "%8.5f %8.5f %8.5f ", chain->proposal.W1, chain->proposal.W2, chain->proposal.p1);
-  if(chain->mcmc_out_hist != NULL){
-    double tvd = total_variation_distance(g_targprobs_ndim, chain->mcmc_out_hist);
-    fprintf(g_tvd_vs_gen_fstream, "%10.7g  ", tvd);
-    tvd = total_variation_distance(g_targprobs_orthants, chain->mcmc_out_orthants_hist);
-    fprintf(g_tvd_vs_gen_fstream, "%10.7g  ", tvd);
-    tvd = total_variation_distance(g_targprobs_one_orthant, chain->mcmc_out_reflected_hist);
-    fprintf(g_tvd_vs_gen_fstream, "%10.7g  ", tvd);
-    for(int i=0; i<chain->current_state->n_dimensions; i++){
-      tvd = total_variation_distance(g_targprobs_1dim, chain->mcmc_out_1d_hists[i]);
-      fprintf(g_tvd_vs_gen_fstream, "%10.7g ", tvd);
-    }
-  }
+  /* if(chain->mcmc_out_hist != NULL){ */
+  /*   double tvd = total_variation_distance(g_targprobs_ndim, chain->mcmc_out_hist); */
+  /*   fprintf(g_tvd_vs_gen_fstream, "%10.7g  ", tvd); */
+  /*   tvd = total_variation_distance(g_targprobs_orthants, chain->mcmc_out_orthants_hist); */
+  /*   fprintf(g_tvd_vs_gen_fstream, "%10.7g  ", tvd); */
+  /*   tvd = total_variation_distance(g_targprobs_one_orthant, chain->mcmc_out_reflected_hist); */
+  /*   fprintf(g_tvd_vs_gen_fstream, "%10.7g  ", tvd); */
+  /*   //  for(int i=0; i<chain->current_state->n_dimensions; i++){ */
+  /*   tvd = total_variation_distance(g_targprobs_1dim, chain->mcmc_out_1d0_hist); */
+  /*     fprintf(g_tvd_vs_gen_fstream, "%10.7g ", tvd); */
+  /*     tvd = total_variation_distance(g_targprobs_1dim, chain->mcmc_out_1dall_hist); */
+  /*     fprintf(g_tvd_vs_gen_fstream, "%10.7g ", tvd); */
+  /* 				     // } */
+  /* } */
   fprintf(g_tvd_vs_gen_fstream, "\n");
 
   free(chain->old_mcmcgees);
@@ -194,19 +234,19 @@ void single_T_chain_output_tvd(Single_T_chain* chain){
   chain->recent_mcmcgees = (double*)malloc(next_n_recent_gees*sizeof(double));
 }
 
-
 void free_single_T_chain(Single_T_chain* chain){
   free_state(chain->current_state);
   free_ndim_histogram(chain->mcmc_out_hist);
-  if(DO_TVD){ free(chain->old_mcmcgees); free(chain->recent_mcmcgees); }
-  free(chain);
-  
+  //  if(DO_TVD){ free(chain->old_mcmcgees); free(chain->recent_mcmcgees); }
+  free(chain); 
 }
 
 // Multi_T_chain
 Multi_T_chain* construct_multi_T_chain(int n_temperatures, double* temperatures, Proposal* proposals, State** states, const Binning_spec_set* bins, const char* type){
   Multi_T_chain* multi_T_chain = (Multi_T_chain*)malloc(sizeof(Multi_T_chain));
   multi_T_chain->n_temperatures = n_temperatures;
+  multi_T_chain->generation = 0;
+  multi_T_chain->count_within_T_updates = 0;
   multi_T_chain->coupled_chains = (Single_T_chain**)malloc(n_temperatures*sizeof(Single_T_chain*));
   for(int i=0; i<n_temperatures; i++){
     //  printf("i: %i;  before construct single T chain. \n", i);
@@ -220,37 +260,37 @@ void multi_T_chain_within_T_mcmc_step(Multi_T_chain* multi_T_chain){
   for(int i=0; i<multi_T_chain->n_temperatures; i++){
     Single_T_chain* chain = multi_T_chain->coupled_chains[i];
     single_T_chain_mcmc_step( chain );
-    double* exact_xs = NULL;
-    if(DO_EXACT){
-      exact_xs = draw_ndim(n_dim, g_targ_1d);
-    }
     if(OUTPUT_SAMPLES){
       printf("%6i  %11.8f %11.8g ", chain->generation, chain->temperature, chain->current_state->prob); 
       print_array_of_double(n_dim, chain->current_state->point); printf(" ");
-      //    print_array_of_int(n_dim, i_array_from_x_array(chain->mcmc_out_hist->bins, n_dim, chain->current_state->point));
-      if(DO_EXACT){ 
-	print_array_of_double(n_dim, exact_xs);
-	//	print_array_of_int(n_dim, i_array_from_x_array(chain->exact_draw_hist->bins, n_dim, exact_xs));
-      }
-
       printf("\n");
-    }
-   
-    if(DO_TVD){
+    }   
+    //  if(DO_TVD){
       single_T_chain_histogram_current_state(chain); // multi_T_chain->coupled_chains[i]);
       // K-S D statistic:
       int j = chain->generation - chain->n_old_gees - 1; // (chain->generation - 1) % TVD_EVERY;
-      
       chain->recent_mcmcgees[j] = g(chain->current_state);
-      //   printf("FRED j: %i %i %g \n", chain->n_recent_gees, j, chain->recent_mcmcgees[j]);	
       if(chain->generation == chain->n_old_gees + chain->n_recent_gees){ // multi_T_chain->next_summary_generation){  // %TVD_EVERY == 0){	 
-	//	  printf("about to call output_tvd...\n");
 	single_T_chain_output_tvd(chain);
-      } // if gen % TVD_EVERY == 0
-         
-    }
-    free(exact_xs);
+      }     
+      // }
   }
+}
+
+void multi_T_chain_T_swap_mcmc_step(Multi_T_chain* multi_T_chain, int i_c, int i_h){
+  assert(i_c < i_h);
+  Single_T_chain* cold = multi_T_chain->coupled_chains[i_c];
+  Single_T_chain* hot = multi_T_chain->coupled_chains[i_h];
+  double T_c = cold->temperature;
+  double T_h = hot->temperature;
+  double pr_c =  cold->current_state->prob;
+  double pr_h =  hot->current_state->prob;
+  if( (pr_h > pr_c)  ||  (drand() < pow( (pr_h/pr_c), (1.0/T_c - 1.0/T_h) ) ) ){ 
+    State* swap_state = cold->current_state;
+    cold->current_state = hot->current_state;
+    hot->current_state = swap_state;
+  }
+
 }
 
 void multi_T_chain_output_tvd(Multi_T_chain* multi_T_chain){
@@ -291,7 +331,7 @@ Ndim_histogram* construct_copy_ndim_histogram(const Ndim_histogram* A){
 void add_data_pt_to_ndim_histogram(Ndim_histogram* A, int n_dim, double* xs){
   assert(n_dim == A->Ndim);
   int* i_array = i_array_from_x_array(A->bins, n_dim, xs); //
-  double* bp = get_pointer_to_element(A->weights, i_array); 
+  double* bp = get_pointer_to_double_element(A->weights, i_array); 
   (*bp) += 1.0;
   A->total_weight += 1.0;
   free(i_array);
@@ -472,7 +512,7 @@ double sum_abs_difference_ndim_arrays_of_double(const Ndim_array_of_double* a1, 
   return sum_abs_difference;
 }
 
-double* get_pointer_to_element(Ndim_array_of_double* A, int* index_array){
+double* get_pointer_to_double_element(Ndim_array_of_double* A, int* index_array){
   int Ndim = A->Ndim;
   Ndim_array_of_double* B = A;
   for(int j=0; j<Ndim-1; j++){
@@ -521,9 +561,21 @@ Ndim_array_of_int* construct_ndim_array_of_int(int Ndim, int Nsize, int init_val
   return array_struct;
 }
 
+int* get_pointer_to_int_element(Ndim_array_of_int* A, int* index_array){
+  int Ndim = A->Ndim;
+  Ndim_array_of_int* B = A;
+  for(int j=0; j<Ndim-1; j++){
+    B = ((Ndim_array_of_int**)B->array)[index_array[j]];
+  }
+  // at this point, B should point to 1 dim 'Ndim_array_of_int', whose array field is a regular array of double:
+  int* array_of_int = (int*)B->array;
+  return array_of_int + index_array[Ndim-1];
+}
+
 // target 1dim
 Target_1dim* construct_target_1dim(int n_peaks, Target_peak_1dim* peaks){
   Target_1dim* targ_1d = (Target_1dim*)malloc(sizeof(Target_1dim));
+  targ_1d->normalized = 0; // not normalized yet.
   targ_1d->n_modes = n_peaks;
   targ_1d->peaks = peaks; 
   normalize_target_1dim(targ_1d);
@@ -553,6 +605,7 @@ void normalize_target_1dim(Target_1dim* targ){
   for(int i=0; i<targ->n_modes; i++){
     targ->peaks[i].weight /= w_sum;
   }
+  targ->normalized = 1; // normalized now.
 }
 
 // more general version - can be used with > 2 peaks, with non-equal sigmas and weights
