@@ -21,6 +21,8 @@ gsl_rng* g_rng;
 FILE* g_tvd_vs_gen_fstream; 
 FILE* g_run_params_fstream;
 
+long g_n_pi_evaluations;
+
 // main:
 int main(int argc, char* argv[]){
  g_run_params_fstream = fopen("run_params", "w");
@@ -55,10 +57,11 @@ int main(int argc, char* argv[]){
 
   char run_param_string[10000];
   int next_arg = 3 + 3*targ_1d->n_modes;
-  int burn_in_steps = atoi(argv[next_arg]);
-  int mcmc_steps = atoi(argv[next_arg+1]);
-  int n_replicates = atoi(argv[next_arg+2]);
-  fprintf(g_run_params_fstream,"# burn-in, mcmc steps, n reps: %i %i %i \n", burn_in_steps, mcmc_steps, n_replicates);
+  int burn_in_steps; // = atoi(argv[next_arg]);
+next_arg--;
+  int mcmc_steps = atoi(argv[next_arg+1]); next_arg--;
+  // int n_replicates = atoi(argv[next_arg+2]);
+  fprintf(g_run_params_fstream,"# burn-in, mcmc steps: %i %i \n", burn_in_steps, mcmc_steps);
   int n_temperatures = atoi(argv[next_arg+3]);
   fprintf(g_run_params_fstream,"# n temperatures: %i \n", n_temperatures);
   next_arg += 4;
@@ -93,7 +96,7 @@ int main(int argc, char* argv[]){
   fprintf(g_run_params_fstream,"# seed: %i \n", seed);
   gsl_rng_set(g_rng, seed);
   // *************** open output files *************
-  g_tvd_vs_gen_fstream = fopen("tvd_vs_gen", "w");
+  g_tvd_vs_gen_fstream = fopen("tvd_etc_vs_gen", "w");
 
   //g_Ngrid_max += g_Ngrid_max % 2; // if odd, add one, to make it be even.
 
@@ -126,12 +129,13 @@ int main(int argc, char* argv[]){
   // double tvd_sum = 0.0;
   //  double tvdsq_sum = 0.0;
 
-  for(int j=0; j<n_replicates; j++){
+  //  for(int j=0; j<n_replicates; j++){
     State** states = (State**)malloc(n_temperatures*sizeof(State*));
     for(int i=0; i<n_temperatures; i++){
-      states[i] = construct_state(n_dimensions, targ_1d);
+      states[i] = construct_state(n_dimensions, targ_1d, temperatures[i]);
     }
     Multi_T_chain* multi_T_chain = construct_multi_T_chain(n_temperatures, temperatures, proposals, states, &the_bin_set, chain_type);
+    g_n_pi_evaluations = 0;
   // ********** do burn-in ***********
     for(int n=0; n<burn_in_steps; n++){
       multi_T_chain_within_T_mcmc_step(multi_T_chain);
@@ -140,7 +144,13 @@ int main(int argc, char* argv[]){
     // ********** do post-burn-in *********
     for(int n=1; n<=mcmc_steps; n++){   
       // take a mcmc step
-      multi_T_chain_within_T_mcmc_step(multi_T_chain);   
+      multi_T_chain_within_T_mcmc_step(multi_T_chain);  
+      for(int i=0; i<n_temperatures-1; i++){
+	for(int j=i+1; j<n_temperatures; j++){
+	  //	  printf("%i %i \n", i, j);
+	  multi_T_chain_T_swap_mcmc_step(multi_T_chain, i, j);
+	}
+      } 
       //  fprintf(stderr, "n: %i \n", n);
     }
     multi_T_chain_output_tvd(multi_T_chain);
@@ -149,7 +159,7 @@ int main(int argc, char* argv[]){
     /* tvdsq_sum += tvd*tvd; */
     //  printf("before free_multi...\n");
     free_multi_T_chain(multi_T_chain);
-  } // end loop over reps
+    //  } // end loop over reps
   // printf("after reps loop...\n");
   /* double tvd_avg = tvd_sum/n_replicates; */
   /* double tvd_variance = tvdsq_sum/n_replicates - tvd_avg*tvd_avg; */
@@ -165,10 +175,17 @@ int main(int argc, char* argv[]){
 
 
 // propose uniformly from cube or ball centered on present point
-double* propose(int n_dim, double* x_array, Proposal* prop){
+double* propose(int n_dim, double* x_array, Proposal* prop, int* which_prop){
   double* prop_x_array = (double*)malloc(n_dim*sizeof(double));
   //  printf("porposal:: %s  %8.5f %8.5f %8.5f \n", prop->shape, prop->W1, prop->W2, prop->p1); 
-  double Width = (drand() < prop->p1)? prop->W1 : prop->W2;
+  double Width; //  = (drand() < prop->p1)? prop->W1 : prop->W2;
+  if(drand() < prop->p1){
+    Width = prop->W1;
+    *which_prop = 1;
+  }else{
+    Width = prop->W2;
+    *which_prop = 2;
+  }
   if(!strcmp(prop->shape, "gaussian")){
     //   printf ("gaussian branch. width: %12.5g\n", Width);
     for(int i=0; i<n_dim; i++){
@@ -189,17 +206,18 @@ double* propose(int n_dim, double* x_array, Proposal* prop){
   return prop_x_array;
 }
 
-double F(const Target_1dim* targ_1d, int n_dim, double* x_array){
+double f_ndim(const Target_1dim* targ_1d, int n_dim, double* x_array){ // just product over dimensions of f_1dim
   double result = 1.0;
   for(int i=0; i<n_dim; i++){
-    double x = x_array[i];
-    result *= f_1dim(targ_1d, x);
+    //  double x = x_array[i];
+    result *= f_1dim(targ_1d, x_array[i]);
   }
   //  printf("x p: %12.6g %12.6g \n", x_array[0], result);
+  g_n_pi_evaluations++; // just count the number of times this function has been called
   return result;
 }    
 
-double f_1dim(const Target_1dim* targ_1d, double x){
+double f_1dim(const Target_1dim* targ_1d, double x){ // 
   int n_modes = targ_1d->n_modes;
   Target_peak_1dim* peaks = targ_1d->peaks;
   double f = 0.0;
@@ -209,6 +227,19 @@ double f_1dim(const Target_1dim* targ_1d, double x){
     //   printf("i, x, X, position, sigma: %i %8.5f %8.5f %8.5f %8.5f \n", i, x, X, g_peaks[i].position, g_peaks[i].sigma);
   }
   return f*ONEOVERSQRT2PI; // to normalize such that integral from -inf to +inf is sum(weights)
+}
+
+double f_1dim_T(const Target_1dim* targ_1d, double x, double temperature){ // each component of mixture is raised to 1/T, then summed
+  // this is upper bound to f_1dim**(1/T)
+  int n_modes = targ_1d->n_modes;
+  Target_peak_1dim* peaks = targ_1d->peaks;
+  double f = 0.0;
+  for(int i=0; i<n_modes; i++){
+    double X = (x-peaks[i].position)/peaks[i].sigma;
+    f += pow(ONEOVERSQRT2PI*exp(-0.5 * X*X) * peaks[i].weight/peaks[i].sigma, 1.0/temperature);
+    //   printf("i, x, X, position, sigma: %i %8.5f %8.5f %8.5f %8.5f \n", i, x, X, g_peaks[i].position, g_peaks[i].sigma);
+  }
+  return f;
 }
 
 double integral_f_1dim(const Target_1dim* targ_1d, double x, double y){ // integral of f_1dim from x to y
@@ -222,7 +253,7 @@ double integral_f_1dim(const Target_1dim* targ_1d, double x, double y){ // integ
   return integral;
 }
 
-double cdf(double y){
+double cdf(double y){ // integral of f_1dim from -inf to y
   Target_peak_1dim* peaks = g_targ_1d->peaks;
   double integral = 0.0;
   for(int i=0; i<g_targ_1d->n_modes; i++){
@@ -230,8 +261,6 @@ double cdf(double y){
   }
   return integral;
 }
-
-
 
 int cmpfunc (const void * a, const void * b)
 {
@@ -325,30 +354,41 @@ void print_array_of_double(int Nsize, double* array){
   }// printf("\n");
 }
 
-
-double draw_1dim(const Target_1dim* targ_1d){
-  double wsum = 0.0;
+double draw_1dim(const Target_1dim* targ_1d, double temperature){
+  double w_T_sum = 0.0;
+  double safety_factor = 1.01;
   int n_modes = targ_1d->n_modes;
+  assert(targ_1d->normalized);
   Target_peak_1dim* peaks = targ_1d->peaks;
+  double* w_T = (double*)malloc(n_modes*sizeof(double));
   for(int i=0; i<n_modes; i++){
-    wsum += peaks[i].weight;
+    w_T[i] = sqrt(temperature)*pow(peaks[i].weight, 1.0/temperature)*pow(SQRT2PI*peaks[i].sigma, (1.0 - 1.0/temperature));
+    w_T_sum += w_T[i];
   }
   double random_number = drand();
   double w = 0.0;
   for(int i=0; i<n_modes; i++){
-    peaks[i].weight /= wsum;
-    w += peaks[i].weight;
-    if( random_number < w ){
-      return gsl_ran_gaussian(g_rng, peaks[i].sigma) + peaks[i].position;
+    w += w_T[i];
+    if( random_number*w_T_sum < w ){
+      while(1){
+	double x = gsl_ran_gaussian(g_rng, sqrt(temperature)*peaks[i].sigma) + peaks[i].position;
+	double mixture_of_heated_peaks = f_1dim_T(targ_1d, x, temperature);
+	double heated_mixture_of_peaks = pow(f_1dim(targ_1d, x), 1.0/temperature);
+		assert(safety_factor*mixture_of_heated_peaks >= heated_mixture_of_peaks);
+	// rejection sampling	
+		if( drand()*safety_factor*mixture_of_heated_peaks < heated_mixture_of_peaks){  // accept 
+	  free(w_T);
+	  return x;
+	}
+      } // end loop over rej. sampling trials.
     }
-  }
-  return gsl_ran_gaussian(g_rng, peaks[n_modes-1].sigma) + peaks[n_modes-1].position;
+  } // end loop over modes
 }
 
-double* draw_ndim(int n_dim, const Target_1dim* targ_1d){
+double* draw_ndim(int n_dim, const Target_1dim* targ_1d, double temperature){
   double* xs = (double*)malloc(n_dim*sizeof(double));
   for(int i=0; i<n_dim; i++){
-    xs[i] = draw_1dim(targ_1d);
+    xs[i] = draw_1dim(targ_1d, temperature);
   }
   return xs;
 }
@@ -454,6 +494,18 @@ double Kolmogorov_smirnov_D_statistic_1_sample(const int size1, const double* a1
   return D;
 }
 
+double edf_statistic(const int size, const double* a, double (*cdf)(double) ){
+ // 
+  // to the cdf specified by the function argument.
+  double result = 0.0;
+  for(int i=1; i < size; i++){
+    double I_cdf = (cdf(a[i]) + cdf(a[i-1]));
+    double I_d = ((double)(2*i+1)/size);
+    result += 0.5*fabs(I_cdf - I_d)*(a[i] - a[i-1]);
+  }
+  return result;
+}
+
 double anderson_darling_statistic(const int size, const double* a, double (*cdf)(double) ){
   // calculates the 1-sample KSD statistic for the the sample stored in array a, compared
   // to the cdf specified by the function argument.
@@ -496,22 +548,27 @@ double g_diag(const State* s){
 
 double g_shortrange(const State* s){ // either +1 or -1; changes sign each time one component moves past a peak position
   // so there are 2^d different regions (half +1, half -1) converging at each peak.
+  //  (2*n_modes)^d regions total, half +1, half -1.
   int n_dim = s->n_dimensions;
   double result = -1.0;
   int n_modes = g_targ_1d->n_modes;
   Target_peak_1dim* peaks = g_targ_1d->peaks;
   for(int i=0; i<n_dim; i++){
     double x = s->point[i];
-    for(int j=0; j<n_modes; j++){
-      if(x > peaks[j].position){
+    for(int j=0; j<n_modes-1; j++){
+      if(x > peaks[j].position){ // switch sign as move past each peak.
 	result *= -1.0;
       }
-    }   
+      if(x > 0.5*(peaks[j].position + peaks[j+1].position) ){ // switch sign as move past each midpoint between peaks.
+	result *= 1.0;
+      }
+    } 
+    if(x > peaks[n_modes-1].position){ result *= -1.0; } // switch sign as move past last peak.
   }
   return result;
 }
 
-void add_arrays(int size, double* sum_x, const double* x){ // add second array to first array
+void add_arrays(int size, double* sum_x, const double* x){ // add second array to first array.
 	for(int i=0; i<size; i++){
 		sum_x[i] += x[i];
 	}
