@@ -165,6 +165,17 @@ void single_T_chain_histogram_current_state(Single_T_chain* chain){
 
 void single_T_chain_output_tvd(Single_T_chain* chain){
 
+ double* all_mcmcgees = (double*)malloc(chain->generation*sizeof(double));
+  qsort(chain->recent_mcmcgees, chain->generation - chain->n_old_gees, sizeof(double), cmpfunc);
+  if(chain->old_mcmcgees == NULL){
+    all_mcmcgees = copy_array(chain->n_recent_gees, chain->recent_mcmcgees);
+  }else{
+    //   printf("%8i %8i %8i %8i\n",chain->n_recent_gees, chain->n_old_gees, chain->generation, chain->generation-chain->n_old_gees);
+    all_mcmcgees = merge_sorted_arrays(chain->n_old_gees, chain->old_mcmcgees, chain->generation - chain->n_old_gees, chain->recent_mcmcgees);
+    // chain->n_recent_gees, chain->recent_mcmcgees);
+  }
+
+  if(fabs(chain->temperature - 1.0) < 1e-10){ // only output cold-chain info
   fprintf(g_tvd_vs_gen_fstream, "%8i %8i %8i %8ld  ", chain->generation, chain->n_try, chain->n_accept, g_n_pi_evaluations);
 
   // tvds cols 5-9
@@ -186,20 +197,12 @@ void single_T_chain_output_tvd(Single_T_chain* chain){
 
  // dmusq, KSD, EDFS, pow(chain->sum_q/chain->generation, 2.0), chain->sum_p/chain->generation
   double dmusq = 0.0;
-  for(int i=0; i<chain->current_state->n_dimensions; i++){
+  for(int i=0; i<chain->current_state->n_dimensions; i++){ 
     double dmu = chain->sum_x[i]/chain->generation - g_targ_1d->mean; //  muhat - mu
     dmusq += dmu*dmu; // get square of (muhat - mu) vector.
   } 
 
-  double* all_mcmcgees = (double*)malloc(chain->generation*sizeof(double));
-  qsort(chain->recent_mcmcgees, chain->generation - chain->n_old_gees, sizeof(double), cmpfunc);
-  if(chain->old_mcmcgees == NULL){
-    all_mcmcgees = copy_array(chain->n_recent_gees, chain->recent_mcmcgees);
-  }else{
-    //   printf("%8i %8i %8i %8i\n",chain->n_recent_gees, chain->n_old_gees, chain->generation, chain->generation-chain->n_old_gees);
-    all_mcmcgees = merge_sorted_arrays(chain->n_old_gees, chain->old_mcmcgees, chain->generation - chain->n_old_gees, chain->recent_mcmcgees);
-    // chain->n_recent_gees, chain->recent_mcmcgees);
-  }
+ 
   double KSD =   // anderson_darling_statistic2(chain->generation, all_mcmcgees, cdf);
     Kolmogorov_smirnov_D_statistic_1_sample(chain->generation, all_mcmcgees, cdf);
   //  double ADS = anderson_darling_statistic(chain->generation, all_mcmcgees, cdf);
@@ -224,6 +227,7 @@ void single_T_chain_output_tvd(Single_T_chain* chain){
   /* 				     // } */
   /* } */
   fprintf(g_tvd_vs_gen_fstream, "\n");
+  }
 
   free(chain->old_mcmcgees);
   chain->old_mcmcgees = all_mcmcgees;
@@ -270,7 +274,7 @@ void multi_T_chain_within_T_mcmc_step(Multi_T_chain* multi_T_chain){
       // K-S D statistic:
       int j = chain->generation - chain->n_old_gees - 1; // (chain->generation - 1) % TVD_EVERY;
       chain->recent_mcmcgees[j] = g(chain->current_state);
-      if(i==0 && (chain->generation == chain->n_old_gees + chain->n_recent_gees)){ // multi_T_chain->next_summary_generation){  // %TVD_EVERY == 0){	 
+      if(chain->generation == chain->n_old_gees + chain->n_recent_gees){ // multi_T_chain->next_summary_generation){  // %TVD_EVERY == 0){	 
 	single_T_chain_output_tvd(chain);
       }     
       // }
