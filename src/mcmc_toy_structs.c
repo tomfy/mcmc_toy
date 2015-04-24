@@ -270,7 +270,7 @@ void multi_T_chain_within_T_mcmc_step(Multi_T_chain* multi_T_chain){
       // K-S D statistic:
       int j = chain->generation - chain->n_old_gees - 1; // (chain->generation - 1) % TVD_EVERY;
       chain->recent_mcmcgees[j] = g(chain->current_state);
-      if(chain->generation == chain->n_old_gees + chain->n_recent_gees){ // multi_T_chain->next_summary_generation){  // %TVD_EVERY == 0){	 
+      if(i==0 && (chain->generation == chain->n_old_gees + chain->n_recent_gees)){ // multi_T_chain->next_summary_generation){  // %TVD_EVERY == 0){	 
 	single_T_chain_output_tvd(chain);
       }     
       // }
