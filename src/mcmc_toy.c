@@ -66,25 +66,30 @@ next_arg--;
   fprintf(g_run_params_fstream,"# n temperatures: %i \n", n_temperatures);
   next_arg += 4;
   double* temperatures = (double*)malloc(n_temperatures*sizeof(double));
+  double* rates = (double*)malloc(n_temperatures*sizeof(double));
   Proposal* proposals = (Proposal*)malloc(n_temperatures*sizeof(Proposal));
   for(int j=0; j<n_temperatures; j++){
-    temperatures[j] = atof(argv[next_arg + 5*j]);
-    proposals[j].shape = argv[next_arg+1 + 5*j];
+    temperatures[j] = atof(argv[next_arg]); next_arg++;
+    rates[j] = atof(argv[next_arg]); next_arg++;
+    proposals[j].shape = argv[next_arg]; next_arg++;
     //   fprintf(g_run_params_fstream,"%s \n", proposals[j].shape);
-    proposals[j].W1 = atof(argv[next_arg+2 + 5*j]);
-    proposals[j].W2 = atof(argv[next_arg+3 + 5*j]);
-    proposals[j].p1 = atof(argv[next_arg+4 + 5*j]);
-    fprintf(g_run_params_fstream,"#  T, Proposal(shape,W1,W2,p1):  %8.5f %12s %8.5f %8.5f %8.5f \n", 
-	   temperatures[j], proposals[j].shape, proposals[j].W1, proposals[j].W2, proposals[j].p1);
+    proposals[j].W1 = atof(argv[next_arg]); next_arg++;
+    proposals[j].W2 = atof(argv[next_arg]); next_arg++;
+    proposals[j].p1 = atof(argv[next_arg]); next_arg++;
+    fprintf(g_run_params_fstream,"#  T, rate, Proposal(shape,W1,W2,p1):  %8.5f %8.5f  %12s %8.5f %8.5f %8.5f \n", 
+	    temperatures[j], rates[j], proposals[j].shape, proposals[j].W1, proposals[j].W2, proposals[j].p1);
   }
-  next_arg += 5*n_temperatures;
+  //  next_arg += 5*n_temperatures;
   int n_bins = atoi(argv[next_arg]);
+  //printf("n bins: %i \n", n_bins);
   int n_bins_1d = atoi(argv[next_arg+1]);
   n_bins += (n_bins % 2); // to make it even
   n_bins_1d += (n_bins_1d %2); 
   fprintf(g_run_params_fstream,"#  n_bins: %i n_bins_1d: %i \n", n_bins, n_bins_1d);
+  //printf("#  n_bins: %i n_bins_1d: %i \n", n_bins, n_bins_1d);
   int seed = atoi(argv[next_arg+2]);
   const char* chain_type = argv[next_arg+3];
+  //printf("seed, type: %i  %s \n", seed, chain_type);
   // ******************************************************************
   //  normalize_targ_1dim(g_n_modes, g_peaks); //
 
@@ -112,7 +117,7 @@ next_arg--;
   the_bin_set.onedim_bins = construct_binning_spec(n_bins_1d, targ_1d, -INFINITY, INFINITY);
   the_bin_set.orthants_bins = construct_binning_spec(2, targ_1d, -INFINITY, INFINITY); // bin for each orthant
   the_bin_set.positive_bins =  construct_binning_spec(n_bins/2, targ_1d, 0, INFINITY); 
-  //  print_binning_spec(the_bin_set.onedim_bins);
+  //   print_binning_spec(the_bin_set.onedim_bins);
   Ndim_histogram* targprobs_ndim = init_target_distribution(n_dimensions, n_bins, 1, the_bin_set.ndim_bins);
   g_targprobs_ndim = targprobs_ndim;
   //  print_ndim_array_of_double(targprobs_ndim->weights);
@@ -125,7 +130,8 @@ next_arg--;
   g_targprobs_orthants = targprobs_orthants;
   Ndim_histogram* targprobs_one_orthant = init_target_distribution(n_dimensions, n_bins/2, 1, the_bin_set.positive_bins);
   g_targprobs_one_orthant = targprobs_one_orthant;
-  //  printf("XXX\n");
+  //
+  // printf("XXX\n");
   // double tvd_sum = 0.0;
   //  double tvdsq_sum = 0.0;
 
@@ -134,8 +140,11 @@ next_arg--;
     for(int i=0; i<n_temperatures; i++){
       states[i] = construct_state(n_dimensions, targ_1d, temperatures[i]);
     }
-    Multi_T_chain* multi_T_chain = construct_multi_T_chain(n_temperatures, temperatures, proposals, states, &the_bin_set, chain_type);
+    printf("before construct_multi_T...\n");
+    Multi_T_chain* multi_T_chain = construct_multi_T_chain(n_temperatures, temperatures, rates, proposals, states, &the_bin_set, chain_type);
+ printf("after construct_multi_T...\n");
     g_n_pi_evaluations = 0;
+    int max_pi_evaluations = mcmc_steps; // for now
   // ********** do burn-in ***********
     for(int n=0; n<burn_in_steps; n++){
       multi_T_chain_within_T_mcmc_step(multi_T_chain);
@@ -145,19 +154,24 @@ next_arg--;
     for(int n=1; n<=mcmc_steps; n++){   
       // take a mcmc step
       multi_T_chain_within_T_mcmc_step(multi_T_chain);  
+
+      printf("after multiT withinT step \n");
       for(int i=0; i<n_temperatures-1; i++){
 	for(int j=i+1; j<n_temperatures; j++){
-	  //	  printf("%i %i \n", i, j);
+	  printf("i, j: %i %i \n", i, j);
 	  multi_T_chain_T_swap_mcmc_step(multi_T_chain, i, j);
+	  printf("after multiT T swap...\n");
 	}
       } 
       //  fprintf(stderr, "n: %i \n", n);
+      if(g_n_pi_evaluations >= max_pi_evaluations){ break; }
     }
+    printf("ZZZZZZZZZZ before multi_T_chain_output_tvd.\n");
     multi_T_chain_output_tvd(multi_T_chain);
 
     /* tvd_sum += tvd; */
     /* tvdsq_sum += tvd*tvd; */
-    //  printf("before free_multi...\n");
+    printf("before free_multi...\n");
     free_multi_T_chain(multi_T_chain);
     //  } // end loop over reps
   // printf("after reps loop...\n");
@@ -173,6 +187,7 @@ next_arg--;
  free_ndim_histogram(targprobs_one_orthant);
 } // end of main
 
+// ******************************************************************************************** //
 
 // propose uniformly from cube or ball centered on present point
 double* propose(int n_dim, double* x_array, Proposal* prop, int* which_prop){

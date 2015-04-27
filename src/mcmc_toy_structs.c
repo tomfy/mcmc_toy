@@ -32,14 +32,15 @@ void free_state(State* s){
 }
 
 // Single_T_chain
-Single_T_chain* construct_single_T_chain(double T, Proposal P, State* S, const Binning_spec_set* bins, const char* type){
+Single_T_chain* construct_single_T_chain(double T, double rate, Proposal P, State* S, const Binning_spec_set* bins, const char* type){
   Single_T_chain* single_T_chain = (Single_T_chain*)malloc(sizeof(Single_T_chain));
  
   single_T_chain->current_state = S;
   single_T_chain->sum_x = (double*)malloc(S->n_dimensions*sizeof(double));
   // single_T_chain->current_iid_state = construct_state(S->n_dimensions, g_targ_1d);
   single_T_chain->temperature = T;
-  single_T_chain->generation = 0;
+  single_T_chain->rate = rate;
+  single_T_chain->within_T_steps_taken = 0;
   single_T_chain->n_try = 0;
   single_T_chain->n_accept = 0;
   //  single_T_chain->n_reject = 0;
@@ -94,9 +95,12 @@ State* single_T_chain_mcmc_step(Single_T_chain* chain){
 
   int n_jumps = 0;
   double dsq = 0;
+
+  printf("in singleTmcmcstep. just before accept/reject.\n");
   // prop ratio is 1 for symmetric proposal
   if(strcmp(chain->type, "mcmc") == 0){ // mcmc step
     if((p_of_proposed_state_T > p_of_current_state_T) || (p_of_proposed_state_T > drand() * p_of_current_state_T)){ // accept
+      printf("ACCEPT\n");
       double h0max = 0.0;   // count if jumped from < 0.5 to > 0.5 in x and y
       for(int i=0; i<Ndim; i++){
 	if( ( the_state->point[i] <= h0max  && prop_x_array[i] > h0max ) 
@@ -115,7 +119,9 @@ State* single_T_chain_mcmc_step(Single_T_chain* chain){
     }else{ 
       // reject proposed move. // dsq += 0 , n_jumps += 0
       //   chain->n_reject++;
+      printf("REJECT\n");
       free(prop_x_array);
+      printf("after free(propxarray).\n");
     }
   }else{ // do iid draw
     double* exact_xs = draw_ndim(Ndim, g_targ_1d, chain->temperature);
@@ -129,16 +135,17 @@ State* single_T_chain_mcmc_step(Single_T_chain* chain){
     the_state->prob = f_ndim(g_targ_1d, Ndim, exact_xs);
     chain->n_accept++;
   }
+  printf("in singleT mcmc step. after accept/reject.\n");
   add_arrays(Ndim, chain->sum_x, the_state->point);
   chain->sum_q += g_shortrange(the_state);
   chain->sum_p += the_state->prob; 
   chain->dsq_sum += dsq;
   chain->n_jumps += n_jumps;
-  chain->generation++;
+  chain->within_T_steps_taken++;
   chain->n_try++; 
   if(which_prop == 1){ chain->n_try_1++; }else{ chain->n_try_2++; }
   chain->current_state = the_state;
-  //  fprintf(stderr, "geneartions: %i \n", chain->generation);
+    printf("bottom of single T mcmc step. chain->within_T_steps_taken: %i \n", chain->within_T_steps_taken);
   return the_state;
 }
 
@@ -158,81 +165,69 @@ void single_T_chain_histogram_current_state(Single_T_chain* chain){
     free(reflected_point);
     add_data_pt_to_ndim_histogram(chain->mcmc_out_1d0_hist, 1, the_state->point); // zeroth component
     for(int i=0; i<n_dim; i++){
+      //   printf("i: %8i \n", i);
       add_data_pt_to_ndim_histogram(chain->mcmc_out_1dall_hist, 1, the_state->point+i);
     }
+    //  printf("%10.7g  %10.7g \n", chain->mcmc_out_1d0_hist->total_weight, chain->mcmc_out_1dall_hist->total_weight);
   }
 }
 
 void single_T_chain_output_tvd(Single_T_chain* chain){
 
- double* all_mcmcgees = (double*)malloc(chain->generation*sizeof(double));
-  qsort(chain->recent_mcmcgees, chain->generation - chain->n_old_gees, sizeof(double), cmpfunc);
+ double* all_mcmcgees = (double*)malloc(chain->within_T_steps_taken*sizeof(double));
+ int n_recent_gees = chain->within_T_steps_taken - chain->n_old_gees;
+  qsort(chain->recent_mcmcgees, chain->within_T_steps_taken - chain->n_old_gees, sizeof(double), cmpfunc);
   if(chain->old_mcmcgees == NULL){
-    all_mcmcgees = copy_array(chain->n_recent_gees, chain->recent_mcmcgees);
+    all_mcmcgees = copy_array(n_recent_gees, chain->recent_mcmcgees);
   }else{
-    //   printf("%8i %8i %8i %8i\n",chain->n_recent_gees, chain->n_old_gees, chain->generation, chain->generation-chain->n_old_gees);
-    all_mcmcgees = merge_sorted_arrays(chain->n_old_gees, chain->old_mcmcgees, chain->generation - chain->n_old_gees, chain->recent_mcmcgees);
+    //   printf("%8i %8i %8i %8i\n",chain->n_recent_gees, chain->n_old_gees, chain->within_T_steps_taken, chain->within_T_steps_taken-chain->n_old_gees);
+    all_mcmcgees = merge_sorted_arrays(chain->n_old_gees, chain->old_mcmcgees, n_recent_gees, chain->recent_mcmcgees);
     // chain->n_recent_gees, chain->recent_mcmcgees);
   }
-
+  printf("n old, recent, chain->recent, all gees: %i %i %i %i \n", chain->n_old_gees, n_recent_gees, chain->n_recent_gees, chain->within_T_steps_taken);
   if(fabs(chain->temperature - 1.0) < 1e-10){ // only output cold-chain info
-  fprintf(g_tvd_vs_gen_fstream, "%8i %8i %8i %8ld  ", chain->generation, chain->n_try, chain->n_accept, g_n_pi_evaluations);
+  fprintf(g_tvd_vs_gen_fstream, "%8i %8i %8i %8ld  ", chain->within_T_steps_taken, chain->n_try, chain->n_accept, g_n_pi_evaluations);
 
   // tvds cols 5-9
- if(chain->mcmc_out_hist != NULL){
+  if(chain->mcmc_out_hist != NULL){
     double tvd = total_variation_distance(g_targprobs_ndim, chain->mcmc_out_hist);
     fprintf(g_tvd_vs_gen_fstream, "%10.7g  ", tvd);
     tvd = total_variation_distance(g_targprobs_orthants, chain->mcmc_out_orthants_hist);
     fprintf(g_tvd_vs_gen_fstream, "%10.7g  ", tvd);
     tvd = total_variation_distance(g_targprobs_one_orthant, chain->mcmc_out_reflected_hist);
     fprintf(g_tvd_vs_gen_fstream, "%10.7g  ", tvd);
-    //  for(int i=0; i<chain->current_state->n_dimensions; i++){
     tvd = total_variation_distance(g_targprobs_1dim, chain->mcmc_out_1d0_hist);
-      fprintf(g_tvd_vs_gen_fstream, "%10.7g ", tvd);
-      tvd = total_variation_distance(g_targprobs_1dim, chain->mcmc_out_1dall_hist);
-      fprintf(g_tvd_vs_gen_fstream, "%10.7g ", tvd);
-				     // }
+    fprintf(g_tvd_vs_gen_fstream, "%10.7g ", tvd);
+    tvd = total_variation_distance(g_targprobs_1dim, chain->mcmc_out_1dall_hist);
+    fprintf(g_tvd_vs_gen_fstream, "%10.7g ", tvd);
   }
 
-
- // dmusq, KSD, EDFS, pow(chain->sum_q/chain->generation, 2.0), chain->sum_p/chain->generation
+ // dmusq, KSD, EDFS, pow(chain->sum_q/chain->within_T_steps_taken, 2.0), chain->sum_p/chain->within_T_steps_taken
   double dmusq = 0.0;
   for(int i=0; i<chain->current_state->n_dimensions; i++){ 
-    double dmu = chain->sum_x[i]/chain->generation - g_targ_1d->mean; //  muhat - mu
+    double dmu = chain->sum_x[i]/chain->within_T_steps_taken - g_targ_1d->mean; //  muhat - mu
     dmusq += dmu*dmu; // get square of (muhat - mu) vector.
   } 
-
- 
-  double KSD =   // anderson_darling_statistic2(chain->generation, all_mcmcgees, cdf);
-    Kolmogorov_smirnov_D_statistic_1_sample(chain->generation, all_mcmcgees, cdf);
-  //  double ADS = anderson_darling_statistic(chain->generation, all_mcmcgees, cdf);
-  double EDFS = edf_statistic(chain->generation, all_mcmcgees, cdf);
+  double KSD =   // anderson_darling_statistic2(chain->within_T_steps_taken, all_mcmcgees, cdf);
+    Kolmogorov_smirnov_D_statistic_1_sample(chain->within_T_steps_taken, all_mcmcgees, cdf);
+  //  double ADS = anderson_darling_statistic(chain->within_T_steps_taken, all_mcmcgees, cdf);
+  double EDFS = edf_statistic(chain->within_T_steps_taken, all_mcmcgees, cdf);
   // cols 10-14
-  fprintf(g_tvd_vs_gen_fstream, "%10.7g  %10.7g  %10.7g  %10.7g  %10.7g  ",  
-	  dmusq, KSD, EDFS, pow(chain->sum_q/chain->generation, 2.0), chain->sum_p/chain->generation);
-
-  //  fprintf(g_tvd_vs_gen_fstream, "%8.5f %8.5f %8.5f ", chain->proposal.W1, chain->proposal.W2, chain->proposal.p1);
-  /* if(chain->mcmc_out_hist != NULL){ */
-  /*   double tvd = total_variation_distance(g_targprobs_ndim, chain->mcmc_out_hist); */
-  /*   fprintf(g_tvd_vs_gen_fstream, "%10.7g  ", tvd); */
-  /*   tvd = total_variation_distance(g_targprobs_orthants, chain->mcmc_out_orthants_hist); */
-  /*   fprintf(g_tvd_vs_gen_fstream, "%10.7g  ", tvd); */
-  /*   tvd = total_variation_distance(g_targprobs_one_orthant, chain->mcmc_out_reflected_hist); */
-  /*   fprintf(g_tvd_vs_gen_fstream, "%10.7g  ", tvd); */
-  /*   //  for(int i=0; i<chain->current_state->n_dimensions; i++){ */
-  /*   tvd = total_variation_distance(g_targprobs_1dim, chain->mcmc_out_1d0_hist); */
-  /*     fprintf(g_tvd_vs_gen_fstream, "%10.7g ", tvd); */
-  /*     tvd = total_variation_distance(g_targprobs_1dim, chain->mcmc_out_1dall_hist); */
-  /*     fprintf(g_tvd_vs_gen_fstream, "%10.7g ", tvd); */
-  /* 				     // } */
-  /* } */
+  fprintf(g_tvd_vs_gen_fstream, "%10.7g  %10.7g  %10.7g  %10.7g  %10.7g  %10.8g  ",  
+	  dmusq, KSD, EDFS, pow(chain->sum_q/chain->within_T_steps_taken, 2.0), chain->sum_p/chain->within_T_steps_taken, 
+	  chain->temperature);
   fprintf(g_tvd_vs_gen_fstream, "\n");
   }
-
-  free(chain->old_mcmcgees);
+ printf("old_mcmcgees pointer: %p \n", chain->old_mcmcgees);
+ 
+  if(chain->old_mcmcgees != NULL){  printf("before free old_mcmcgees \n"); free(chain->old_mcmcgees); }
   chain->old_mcmcgees = all_mcmcgees;
-  chain->n_old_gees = chain->n_old_gees + chain->n_recent_gees;
+  chain->n_old_gees = chain->within_T_steps_taken; // chain->n_old_gees + chain->n_recent_gees;
+  printf("before free recent_mcmcgees \n");
+  printf("recent_mcmcgees pointer: %p \n", chain->recent_mcmcgees);
+  // for(int jj=0; jj<chain->n_recent_gees; jj++){ printf("jj, g: %i %g \n", jj, chain->recent_mcmcgees[jj]); }
   free(chain->recent_mcmcgees);
+  printf("after free recent_mcmcgees \n");
   int next_n_recent_gees = (int)((SUMMARY_GEN_FACTOR - 1.0)*chain->n_old_gees);
   chain->n_recent_gees = next_n_recent_gees;
   chain->recent_mcmcgees = (double*)malloc(next_n_recent_gees*sizeof(double));
@@ -246,7 +241,7 @@ void free_single_T_chain(Single_T_chain* chain){
 }
 
 // Multi_T_chain
-Multi_T_chain* construct_multi_T_chain(int n_temperatures, double* temperatures, Proposal* proposals, State** states, const Binning_spec_set* bins, const char* type){
+Multi_T_chain* construct_multi_T_chain(int n_temperatures, double* temperatures, double* rates, Proposal* proposals, State** states, const Binning_spec_set* bins, const char* type){
   Multi_T_chain* multi_T_chain = (Multi_T_chain*)malloc(sizeof(Multi_T_chain));
   multi_T_chain->n_temperatures = n_temperatures;
   multi_T_chain->generation = 0;
@@ -254,7 +249,7 @@ Multi_T_chain* construct_multi_T_chain(int n_temperatures, double* temperatures,
   multi_T_chain->coupled_chains = (Single_T_chain**)malloc(n_temperatures*sizeof(Single_T_chain*));
   for(int i=0; i<n_temperatures; i++){
     //  printf("i: %i;  before construct single T chain. \n", i);
-    multi_T_chain->coupled_chains[i] = construct_single_T_chain(temperatures[i], proposals[i], states[i], bins, type);
+    multi_T_chain->coupled_chains[i] = construct_single_T_chain(temperatures[i], rates[i], proposals[i], states[i], bins, type);
   }
   return multi_T_chain;
 }
@@ -263,22 +258,28 @@ void multi_T_chain_within_T_mcmc_step(Multi_T_chain* multi_T_chain){
   int n_dim = multi_T_chain->coupled_chains[0]->current_state->n_dimensions;
   for(int i=0; i<multi_T_chain->n_temperatures; i++){
     Single_T_chain* chain = multi_T_chain->coupled_chains[i];
-    single_T_chain_mcmc_step( chain );
+    if(drand() < chain->rate){
+      printf("about to call singleT mcmc step \n");
+      single_T_chain_mcmc_step( chain );
+    }
     if(OUTPUT_SAMPLES){
-      printf("%6i  %11.8f %11.8g ", chain->generation, chain->temperature, chain->current_state->prob); 
+      printf("%6i  %11.8f %11.8g ", chain->within_T_steps_taken, chain->temperature, chain->current_state->prob); 
       print_array_of_double(n_dim, chain->current_state->point); printf(" ");
       printf("\n");
     }   
     //  if(DO_TVD){
       single_T_chain_histogram_current_state(chain); // multi_T_chain->coupled_chains[i]);
       // K-S D statistic:
-      int j = chain->generation - chain->n_old_gees - 1; // (chain->generation - 1) % TVD_EVERY;
+      int j = chain->within_T_steps_taken - chain->n_old_gees - 1; // (chain->within_T_steps_taken - 1) % TVD_EVERY;
       chain->recent_mcmcgees[j] = g(chain->current_state);
-      if(chain->generation == chain->n_old_gees + chain->n_recent_gees){ // multi_T_chain->next_summary_generation){  // %TVD_EVERY == 0){	 
+printf("aa n withinT, old, recent: %i %i %i \n", chain->within_T_steps_taken, chain->n_old_gees, chain->n_recent_gees);
+      if(chain->within_T_steps_taken == chain->n_old_gees + chain->n_recent_gees){ // multi_T_chain->next_summary_within_T_steps_taken){  // %TVD_EVERY == 0){
+	printf("XXX n withinT, old, recent: %i %i %i \n", chain->within_T_steps_taken, chain->n_old_gees, chain->n_recent_gees);
 	single_T_chain_output_tvd(chain);
       }     
-      // }
+      printf("end of loop over singleT chains in multiT withinT step. i: %i \n", i);
   }
+  printf("bottom of multiT within T step \n");
 }
 
 void multi_T_chain_T_swap_mcmc_step(Multi_T_chain* multi_T_chain, int i_c, int i_h){
@@ -299,6 +300,7 @@ void multi_T_chain_T_swap_mcmc_step(Multi_T_chain* multi_T_chain, int i_c, int i
 
 void multi_T_chain_output_tvd(Multi_T_chain* multi_T_chain){
   for(int i=0; i<multi_T_chain->n_temperatures; i++){
+    printf("in multi_T output tvd. i: %i \n", i);
     single_T_chain_output_tvd(multi_T_chain->coupled_chains[i]);
   }
 }
@@ -335,6 +337,7 @@ Ndim_histogram* construct_copy_ndim_histogram(const Ndim_histogram* A){
 void add_data_pt_to_ndim_histogram(Ndim_histogram* A, int n_dim, double* xs){
   assert(n_dim == A->Ndim);
   int* i_array = i_array_from_x_array(A->bins, n_dim, xs); //
+  //  printf("z %10.7g \n", xs[0]);
   double* bp = get_pointer_to_double_element(A->weights, i_array); 
   (*bp) += 1.0;
   A->total_weight += 1.0;

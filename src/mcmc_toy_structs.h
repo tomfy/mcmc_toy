@@ -81,7 +81,8 @@ typedef struct
   double sum_q; // sum of g_shortrange (i.e +- 1, changing at each peak
   double sum_p; // sum of state prob densities
   double temperature;
-  int generation;
+  double rate; // probability per generation of doing a within-T step.
+  int within_T_steps_taken; // number of within-T update steps done so far in this chain. (can be less than generation if rate < 1)
   int n_try;
   int n_accept;
   //  int n_reject;
@@ -130,13 +131,13 @@ State* construct_state(int n_dimensions, const Target_1dim* targ_1d, double temp
 void free_state(State* s);
 
 // Single_T_chain
-Single_T_chain* construct_single_T_chain(double T, Proposal P, State* S, const Binning_spec_set* bins, const char* type);
+Single_T_chain* construct_single_T_chain(double T, double rate, Proposal P, State* S, const Binning_spec_set* bins, const char* type);
 State* single_T_chain_mcmc_step(Single_T_chain* chain);
 void single_T_chain_histogram_current_state(Single_T_chain* chain);
 void single_T_chain_output_tvd(Single_T_chain* chain);
 void free_single_T_chain(Single_T_chain* chain);
 // Multi_T_chain
-Multi_T_chain* construct_multi_T_chain(int n_temperatures, double* temperatures, Proposal* proposals, State** states, const Binning_spec_set* bins, const char* type);
+Multi_T_chain* construct_multi_T_chain(int n_temperatures, double* temperatures, double* rates, Proposal* proposals, State** states, const Binning_spec_set* bins, const char* type);
 void multi_T_chain_within_T_mcmc_step(Multi_T_chain* multi_T_chain);
 void multi_T_chain_T_swap_mcmc_step(Multi_T_chain* multi_T_chain, int i_c, int i_h);
 void multi_T_chain_output_tvd(Multi_T_chain* multi_T_chain);
