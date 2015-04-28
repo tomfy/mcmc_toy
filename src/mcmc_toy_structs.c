@@ -13,10 +13,10 @@
 
 // construct a state
 State* construct_state(int n_dimensions, const Target_1dim* targ_1d, double temperature){ 
-  State* the_state = (State*)malloc(sizeof(State));
+  State* the_state = (State*)calloc(1, sizeof(State));
   the_state->n_dimensions = n_dimensions;
   //  the_state->ipoint = (int*)malloc(n_dimensions*sizeof(int));
-  the_state->point = (double*)malloc(n_dimensions*sizeof(double));
+  the_state->point = (double*)calloc(n_dimensions, sizeof(double));
   for(int i=0; i<n_dimensions; i++){
     //  the_state->ipoint[i] = (int)( drand() * (Ngrid_max+1) ); 
     the_state->point = draw_ndim(n_dimensions, targ_1d, temperature); // draw from target distribution
@@ -33,13 +33,14 @@ void free_state(State* s){
 
 // Single_T_chain
 Single_T_chain* construct_single_T_chain(double T, double rate, Proposal P, State* S, const Binning_spec_set* bins, const char* type){
-  Single_T_chain* single_T_chain = (Single_T_chain*)malloc(sizeof(Single_T_chain));
+  Single_T_chain* single_T_chain = (Single_T_chain*)calloc(1, sizeof(Single_T_chain));
  
   single_T_chain->current_state = S;
-  single_T_chain->sum_x = (double*)malloc(S->n_dimensions*sizeof(double));
+  single_T_chain->sum_x = (double*)calloc(S->n_dimensions, sizeof(double));
   // single_T_chain->current_iid_state = construct_state(S->n_dimensions, g_targ_1d);
   single_T_chain->temperature = T;
   single_T_chain->rate = rate;
+  single_T_chain->generation = 0;
   single_T_chain->within_T_steps_taken = 0;
   single_T_chain->n_try = 0;
   single_T_chain->n_accept = 0;
@@ -70,9 +71,9 @@ single_T_chain->mcmc_out_1dall_hist = construct_ndim_histogram(1, bins->onedim_b
   
     // TVD and K-S D statistic stuff
     single_T_chain->n_old_gees = 0;
-    single_T_chain->n_recent_gees = FIRST_SUMMARY_GEN;
-    single_T_chain->old_mcmcgees = NULL;
-    single_T_chain->recent_mcmcgees = (double*)malloc(FIRST_SUMMARY_GEN*sizeof(double));
+    single_T_chain->old_gees = NULL;
+    single_T_chain->n_next_block_gees = FIRST_SUMMARY_GEN;
+    single_T_chain->next_block_gees = (double*)calloc(FIRST_SUMMARY_GEN, sizeof(double));
     //single_T_chain->old_iidgees = NULL;
     //  single_T_chain->recent_iidgees = (double*)malloc(FIRST_SUMMARY_GEN*sizeof(double));
     // }
@@ -96,11 +97,11 @@ State* single_T_chain_mcmc_step(Single_T_chain* chain){
   int n_jumps = 0;
   double dsq = 0;
 
-  printf("in singleTmcmcstep. just before accept/reject.\n");
+  //  printf("in singleTmcmcstep. just before accept/reject.\n");
   // prop ratio is 1 for symmetric proposal
   if(strcmp(chain->type, "mcmc") == 0){ // mcmc step
     if((p_of_proposed_state_T > p_of_current_state_T) || (p_of_proposed_state_T > drand() * p_of_current_state_T)){ // accept
-      printf("ACCEPT\n");
+      //   printf("ACCEPT\n");
       double h0max = 0.0;   // count if jumped from < 0.5 to > 0.5 in x and y
       for(int i=0; i<Ndim; i++){
 	if( ( the_state->point[i] <= h0max  && prop_x_array[i] > h0max ) 
@@ -119,9 +120,9 @@ State* single_T_chain_mcmc_step(Single_T_chain* chain){
     }else{ 
       // reject proposed move. // dsq += 0 , n_jumps += 0
       //   chain->n_reject++;
-      printf("REJECT\n");
+      //   printf("REJECT\n");
       free(prop_x_array);
-      printf("after free(propxarray).\n");
+      //  printf("after free(propxarray).\n");
     }
   }else{ // do iid draw
     double* exact_xs = draw_ndim(Ndim, g_targ_1d, chain->temperature);
@@ -135,17 +136,16 @@ State* single_T_chain_mcmc_step(Single_T_chain* chain){
     the_state->prob = f_ndim(g_targ_1d, Ndim, exact_xs);
     chain->n_accept++;
   }
-  printf("in singleT mcmc step. after accept/reject.\n");
-  add_arrays(Ndim, chain->sum_x, the_state->point);
-  chain->sum_q += g_shortrange(the_state);
-  chain->sum_p += the_state->prob; 
-  chain->dsq_sum += dsq;
+  //  printf("in singleT mcmc step. after accept/reject.\n");
+  
+
+  chain->dsq_sum += dsq; 
   chain->n_jumps += n_jumps;
   chain->within_T_steps_taken++;
   chain->n_try++; 
   if(which_prop == 1){ chain->n_try_1++; }else{ chain->n_try_2++; }
   chain->current_state = the_state;
-    printf("bottom of single T mcmc step. chain->within_T_steps_taken: %i \n", chain->within_T_steps_taken);
+  //  printf("bottom of single T mcmc step. chain->within_T_steps_taken: %i \n", chain->within_T_steps_taken);
   return the_state;
 }
 
@@ -157,7 +157,7 @@ void single_T_chain_histogram_current_state(Single_T_chain* chain){
   if(chain->mcmc_out_hist != NULL){
     add_data_pt_to_ndim_histogram(chain->mcmc_out_hist, n_dim, the_state->point);
     add_data_pt_to_ndim_histogram(chain->mcmc_out_orthants_hist, n_dim, the_state->point);
-    double* reflected_point = (double*)malloc(n_dim*sizeof(double));
+    double* reflected_point = (double*)calloc(n_dim, sizeof(double));
     for(int i=0; i<n_dim; i++){
       reflected_point[i] = fabs(the_state->point[i]);
     }
@@ -174,18 +174,20 @@ void single_T_chain_histogram_current_state(Single_T_chain* chain){
 
 void single_T_chain_output_tvd(Single_T_chain* chain){
 
- double* all_mcmcgees = (double*)malloc(chain->within_T_steps_taken*sizeof(double));
- int n_recent_gees = chain->within_T_steps_taken - chain->n_old_gees;
-  qsort(chain->recent_mcmcgees, chain->within_T_steps_taken - chain->n_old_gees, sizeof(double), cmpfunc);
-  if(chain->old_mcmcgees == NULL){
-    all_mcmcgees = copy_array(n_recent_gees, chain->recent_mcmcgees);
+  double* all_gees = (double*)calloc(chain->generation, sizeof(double));
+  int n_recent_gees = chain->generation - chain->n_old_gees; // number of states stored in next_block (i.e. after old_gees)
+  assert(n_recent_gees == chain->n_next_block_gees || g_n_pi_evaluations >= g_max_pi_evaluations );
+  // printf("top of singleT output_tvd... gen, n_old, nrecent(s): %i %i %i %i \n", chain->generation, chain->n_old_gees, n_recent_gees, chain->n_next_block_gees);
+  qsort(chain->next_block_gees, chain->n_next_block_gees, sizeof(double), cmpfunc);
+  if(chain->old_gees == NULL){
+    all_gees = copy_array(chain->n_next_block_gees, chain->next_block_gees);
   }else{
-    //   printf("%8i %8i %8i %8i\n",chain->n_recent_gees, chain->n_old_gees, chain->within_T_steps_taken, chain->within_T_steps_taken-chain->n_old_gees);
-    all_mcmcgees = merge_sorted_arrays(chain->n_old_gees, chain->old_mcmcgees, n_recent_gees, chain->recent_mcmcgees);
-    // chain->n_recent_gees, chain->recent_mcmcgees);
+    //   printf("%8i %8i %8i %8i\n",chain->n_next_block_gees, chain->n_old_gees, chain->within_T_steps_taken, chain->within_T_steps_taken-chain->n_old_gees);
+    all_gees = merge_sorted_arrays(chain->n_old_gees, chain->old_gees, chain->n_next_block_gees, chain->next_block_gees);
   }
-  printf("n old, recent, chain->recent, all gees: %i %i %i %i \n", chain->n_old_gees, n_recent_gees, chain->n_recent_gees, chain->within_T_steps_taken);
-  if(fabs(chain->temperature - 1.0) < 1e-10){ // only output cold-chain info
+  //printf("n old, recent, chain->recent, all gees: %i %i %i %i \n", 
+  //	 chain->n_old_gees, chain->n_next_block_gees, chain->n_next_block_gees, chain->within_T_steps_taken);
+  if(fabs(chain->temperature - 1.0) < 1e-10){ // only output cold-chain info.
   fprintf(g_tvd_vs_gen_fstream, "%8i %8i %8i %8ld  ", chain->within_T_steps_taken, chain->n_try, chain->n_accept, g_n_pi_evaluations);
 
   // tvds cols 5-9
@@ -208,45 +210,45 @@ void single_T_chain_output_tvd(Single_T_chain* chain){
     double dmu = chain->sum_x[i]/chain->within_T_steps_taken - g_targ_1d->mean; //  muhat - mu
     dmusq += dmu*dmu; // get square of (muhat - mu) vector.
   } 
-  double KSD =   // anderson_darling_statistic2(chain->within_T_steps_taken, all_mcmcgees, cdf);
-    Kolmogorov_smirnov_D_statistic_1_sample(chain->within_T_steps_taken, all_mcmcgees, cdf);
-  //  double ADS = anderson_darling_statistic(chain->within_T_steps_taken, all_mcmcgees, cdf);
-  double EDFS = edf_statistic(chain->within_T_steps_taken, all_mcmcgees, cdf);
+  double KSD =   // anderson_darling_statistic2(chain->within_T_steps_taken, all_gees, cdf);
+    Kolmogorov_smirnov_D_statistic_1_sample(chain->within_T_steps_taken, all_gees, cdf);
+  //  double ADS = anderson_darling_statistic(chain->within_T_steps_taken, all_gees, cdf);
+  double EDFS = edf_statistic(chain->within_T_steps_taken, all_gees, cdf);
   // cols 10-14
   fprintf(g_tvd_vs_gen_fstream, "%10.7g  %10.7g  %10.7g  %10.7g  %10.7g  %10.8g  ",  
 	  dmusq, KSD, EDFS, pow(chain->sum_q/chain->within_T_steps_taken, 2.0), chain->sum_p/chain->within_T_steps_taken, 
 	  chain->temperature);
   fprintf(g_tvd_vs_gen_fstream, "\n");
   }
- printf("old_mcmcgees pointer: %p \n", chain->old_mcmcgees);
+//printf("old_gees pointer: %p \n", chain->old_gees);
  
-  if(chain->old_mcmcgees != NULL){  printf("before free old_mcmcgees \n"); free(chain->old_mcmcgees); }
-  chain->old_mcmcgees = all_mcmcgees;
-  chain->n_old_gees = chain->within_T_steps_taken; // chain->n_old_gees + chain->n_recent_gees;
-  printf("before free recent_mcmcgees \n");
-  printf("recent_mcmcgees pointer: %p \n", chain->recent_mcmcgees);
-  // for(int jj=0; jj<chain->n_recent_gees; jj++){ printf("jj, g: %i %g \n", jj, chain->recent_mcmcgees[jj]); }
-  free(chain->recent_mcmcgees);
-  printf("after free recent_mcmcgees \n");
-  int next_n_recent_gees = (int)((SUMMARY_GEN_FACTOR - 1.0)*chain->n_old_gees);
-  chain->n_recent_gees = next_n_recent_gees;
-  chain->recent_mcmcgees = (double*)malloc(next_n_recent_gees*sizeof(double));
+  if(chain->old_gees != NULL){  printf("before free old_gees \n"); free(chain->old_gees); }
+  chain->old_gees = all_gees;
+  chain->n_old_gees = chain->generation; // chain->n_old_gees + chain->n_next_block_gees;
+//printf("before free next_block_gees. n_old_gees, with_T_steps_taken: %i %i  \n", chain->n_old_gees, chain->within_T_steps_taken);
+// printf("next_block_gees pointer: %p \n", chain->next_block_gees);
+  // for(int jj=0; jj<chain->n_next_block_gees; jj++){ printf("jj, g: %i %g \n", jj, chain->next_block_gees[jj]); }
+  free(chain->next_block_gees);
+// printf("after free next_block_gees \n");
+  int next_n_next_block_gees = (int)((SUMMARY_GEN_FACTOR - 1.0)*chain->n_old_gees);
+  chain->n_next_block_gees = next_n_next_block_gees;
+  chain->next_block_gees = (double*)calloc(next_n_next_block_gees, sizeof(double));
 }
 
 void free_single_T_chain(Single_T_chain* chain){
   free_state(chain->current_state);
   free_ndim_histogram(chain->mcmc_out_hist);
-  //  if(DO_TVD){ free(chain->old_mcmcgees); free(chain->recent_mcmcgees); }
+  //  if(DO_TVD){ free(chain->old_gees); free(chain->next_block_gees); }
   free(chain); 
 }
 
 // Multi_T_chain
 Multi_T_chain* construct_multi_T_chain(int n_temperatures, double* temperatures, double* rates, Proposal* proposals, State** states, const Binning_spec_set* bins, const char* type){
-  Multi_T_chain* multi_T_chain = (Multi_T_chain*)malloc(sizeof(Multi_T_chain));
+  Multi_T_chain* multi_T_chain = (Multi_T_chain*)calloc(1, sizeof(Multi_T_chain));
   multi_T_chain->n_temperatures = n_temperatures;
   multi_T_chain->generation = 0;
   multi_T_chain->count_within_T_updates = 0;
-  multi_T_chain->coupled_chains = (Single_T_chain**)malloc(n_temperatures*sizeof(Single_T_chain*));
+  multi_T_chain->coupled_chains = (Single_T_chain**)calloc(n_temperatures, sizeof(Single_T_chain*));
   for(int i=0; i<n_temperatures; i++){
     //  printf("i: %i;  before construct single T chain. \n", i);
     multi_T_chain->coupled_chains[i] = construct_single_T_chain(temperatures[i], rates[i], proposals[i], states[i], bins, type);
@@ -259,27 +261,42 @@ void multi_T_chain_within_T_mcmc_step(Multi_T_chain* multi_T_chain){
   for(int i=0; i<multi_T_chain->n_temperatures; i++){
     Single_T_chain* chain = multi_T_chain->coupled_chains[i];
     if(drand() < chain->rate){
-      printf("about to call singleT mcmc step \n");
+      //  printf("about to call singleT mcmc step. i, n_old_gees: %i %i \n", i, chain->n_old_gees);
       single_T_chain_mcmc_step( chain );
+      //  printf("after call to singleT mcmc step. i,  n_old_gees: %i %i \n", i, chain->n_old_gees);
     }
+    add_arrays(n_dim, chain->sum_x, chain->current_state->point);
+    chain->sum_q += g_shortrange(chain->current_state);
+    chain->sum_p += chain->current_state->prob; 
+    chain->generation++; // generation increments whether a particular chain does a within_T step or not.
+    single_T_chain_histogram_current_state(chain);
+    int j = chain->generation - chain->n_old_gees - 1;
+    //   printf("i, generation(s), n_old, n_recent, j: %i %i %i %i  %i %i  \n", 
+    //	   i, multi_T_chain->generation, chain->generation, chain->n_old_gees, chain->n_next_block_gees, j);
+    assert(j < chain->n_next_block_gees && j >= 0);
+    chain->next_block_gees[j] = g(chain->current_state);
+  }
+  multi_T_chain->generation++;
+
+  // output
+  for(int i=0; i<multi_T_chain->n_temperatures; i++){
+    Single_T_chain* chain = multi_T_chain->coupled_chains[i];
     if(OUTPUT_SAMPLES){
       printf("%6i  %11.8f %11.8g ", chain->within_T_steps_taken, chain->temperature, chain->current_state->prob); 
       print_array_of_double(n_dim, chain->current_state->point); printf(" ");
       printf("\n");
     }   
-    //  if(DO_TVD){
-      single_T_chain_histogram_current_state(chain); // multi_T_chain->coupled_chains[i]);
-      // K-S D statistic:
-      int j = chain->within_T_steps_taken - chain->n_old_gees - 1; // (chain->within_T_steps_taken - 1) % TVD_EVERY;
-      chain->recent_mcmcgees[j] = g(chain->current_state);
-printf("aa n withinT, old, recent: %i %i %i \n", chain->within_T_steps_taken, chain->n_old_gees, chain->n_recent_gees);
-      if(chain->within_T_steps_taken == chain->n_old_gees + chain->n_recent_gees){ // multi_T_chain->next_summary_within_T_steps_taken){  // %TVD_EVERY == 0){
-	printf("XXX n withinT, old, recent: %i %i %i \n", chain->within_T_steps_taken, chain->n_old_gees, chain->n_recent_gees);
+    //  printf("aa n withinT, old, recent: %i %i %i \n", chain->within_T_steps_taken, chain->n_old_gees, chain->n_next_block_gees);
+      //  if(multi_T_chain->generation == multi_T_chain->next_summary_generation){
+      if(chain->generation == chain->n_old_gees + chain->n_next_block_gees){
+	//	printf("XXX n withinT, old, recent: %i %i %i \n", chain->within_T_steps_taken, chain->n_old_gees, chain->n_next_block_gees);
 	single_T_chain_output_tvd(chain);
       }     
-      printf("end of loop over singleT chains in multiT withinT step. i: %i \n", i);
+      //  printf("end of loop over singleT chains in multiT withinT step. i: %i \n", i);
   }
-  printf("bottom of multiT within T step \n");
+  multi_T_chain->summary_generation = multi_T_chain->generation;
+  //  multi_T_chain->next_summary_generation = (int)(multi_T_chain->generation * SUMMARY_GEN_FACTOR);;
+  // printf("bottom of multiT within T step \n");
 }
 
 void multi_T_chain_T_swap_mcmc_step(Multi_T_chain* multi_T_chain, int i_c, int i_h){
@@ -295,7 +312,6 @@ void multi_T_chain_T_swap_mcmc_step(Multi_T_chain* multi_T_chain, int i_c, int i
     cold->current_state = hot->current_state;
     hot->current_state = swap_state;
   }
-
 }
 
 void multi_T_chain_output_tvd(Multi_T_chain* multi_T_chain){
@@ -303,6 +319,7 @@ void multi_T_chain_output_tvd(Multi_T_chain* multi_T_chain){
     printf("in multi_T output tvd. i: %i \n", i);
     single_T_chain_output_tvd(multi_T_chain->coupled_chains[i]);
   }
+  multi_T_chain->next_summary_generation = (int)(multi_T_chain->summary_generation * SUMMARY_GEN_FACTOR);
 }
 
 void free_multi_T_chain(Multi_T_chain* chain){
@@ -317,7 +334,7 @@ Ndim_histogram* construct_ndim_histogram
 // (int Ndim, int n_bins){ // there are bin boundaries x_0, .. x_Ngrid_max, and
 (int n_dim, const Binning_spec* bins){
  
-  Ndim_histogram* histogram = (Ndim_histogram*)malloc(sizeof(Ndim_histogram));
+  Ndim_histogram* histogram = (Ndim_histogram*)calloc(1, sizeof(Ndim_histogram));
   histogram->Ndim = n_dim;
   histogram->Ngrid_max = bins->n_bins;
   histogram->total_weight = 0;
@@ -327,7 +344,7 @@ Ndim_histogram* construct_ndim_histogram
 }
 
 Ndim_histogram* construct_copy_ndim_histogram(const Ndim_histogram* A){
-  Ndim_histogram* histogram = (Ndim_histogram*)malloc(sizeof(Ndim_histogram));
+  Ndim_histogram* histogram = (Ndim_histogram*)calloc(1, sizeof(Ndim_histogram));
   histogram->Ndim = A->Ndim;
   histogram->Ngrid_max = A->Ngrid_max;
   histogram->total_weight = A->total_weight;
@@ -352,17 +369,17 @@ void* free_ndim_histogram(Ndim_histogram* h){
 
 // Ndim_array_of_double
 Ndim_array_of_double* construct_ndim_array_of_double(int Ndim, int Nsize, double init_value){
-  Ndim_array_of_double* array_struct = (Ndim_array_of_double*)malloc(sizeof(Ndim_array_of_double));
+  Ndim_array_of_double* array_struct = (Ndim_array_of_double*)calloc(1, sizeof(Ndim_array_of_double));
   array_struct->Ndim = Ndim;
   array_struct->Nsize = Nsize;
   if(Ndim == 1){
-    double* the_array = (double*)malloc(Nsize*sizeof(double));
+    double* the_array = (double*)calloc(Nsize, sizeof(double));
     for(int i=0; i<Nsize; i++){
       the_array[i] = init_value;
     }
     array_struct->array = the_array; 
   }else{
-    Ndim_array_of_double** the_array = (Ndim_array_of_double**)malloc(Nsize*sizeof(Ndim_array_of_double*));
+    Ndim_array_of_double** the_array = (Ndim_array_of_double**)calloc(Nsize, sizeof(Ndim_array_of_double*));
     for(int i=0; i<Nsize; i++){
       the_array[i] = construct_ndim_array_of_double(Ndim-1, Nsize, init_value);
     }
@@ -372,17 +389,17 @@ Ndim_array_of_double* construct_ndim_array_of_double(int Ndim, int Nsize, double
 }
 
 Ndim_array_of_double* construct_copy_ndim_array_of_double(Ndim_array_of_double* A){
-  Ndim_array_of_double* copy = (Ndim_array_of_double*)malloc(sizeof(Ndim_array_of_double));
+  Ndim_array_of_double* copy = (Ndim_array_of_double*)calloc(1, sizeof(Ndim_array_of_double));
   copy->Ndim = A->Ndim;
   copy->Nsize = A->Nsize;
   if(A->Ndim == 1){
-    double* the_array = (double*)malloc(A->Nsize*sizeof(double));
+    double* the_array = (double*)calloc(A->Nsize, sizeof(double));
     for(int i=0; i<A->Nsize; i++){
       the_array[i] = ((double*)A->array)[i];
     }
     copy->array = the_array; 
   }else{
-    Ndim_array_of_double** the_array = (Ndim_array_of_double**)malloc(A->Nsize*sizeof(Ndim_array_of_double*));
+    Ndim_array_of_double** the_array = (Ndim_array_of_double**)calloc(A->Nsize, sizeof(Ndim_array_of_double*));
     for(int i=0; i<A->Nsize; i++){
       the_array[i] = construct_copy_ndim_array_of_double( ((Ndim_array_of_double**)A->array)[i] );
     }
@@ -549,17 +566,17 @@ void print_ndim_array_of_double(const Ndim_array_of_double* A){
 
 // Ndim_array_of_int
 Ndim_array_of_int* construct_ndim_array_of_int(int Ndim, int Nsize, int init_value){
-  Ndim_array_of_int* array_struct = (Ndim_array_of_int*)malloc(sizeof(Ndim_array_of_int));
+  Ndim_array_of_int* array_struct = (Ndim_array_of_int*)calloc(1, sizeof(Ndim_array_of_int));
   array_struct->Ndim = Ndim;
   array_struct->Nsize = Nsize;
   if(Ndim == 1){
-    int* the_array = (int*)malloc(Nsize*sizeof(int));
+    int* the_array = (int*)calloc(Nsize, sizeof(int));
     for(int i=0; i<Nsize; i++){
       the_array[i] = init_value;
     }
     array_struct->array = the_array; 
   }else{
-    Ndim_array_of_int** the_array = (Ndim_array_of_int**)malloc(Nsize*sizeof(Ndim_array_of_int*));
+    Ndim_array_of_int** the_array = (Ndim_array_of_int**)calloc(Nsize, sizeof(Ndim_array_of_int*));
     for(int i=0; i<Nsize; i++){
       the_array[i] = construct_ndim_array_of_int(Ndim-1, Nsize, init_value);
     }
@@ -581,7 +598,7 @@ int* get_pointer_to_int_element(Ndim_array_of_int* A, int* index_array){
 
 // target 1dim
 Target_1dim* construct_target_1dim(int n_peaks, Target_peak_1dim* peaks){
-  Target_1dim* targ_1d = (Target_1dim*)malloc(sizeof(Target_1dim));
+  Target_1dim* targ_1d = (Target_1dim*)calloc(1, sizeof(Target_1dim));
   targ_1d->normalized = 0; // not normalized yet.
   targ_1d->n_modes = n_peaks;
   targ_1d->peaks = peaks; 
@@ -617,7 +634,7 @@ void normalize_target_1dim(Target_1dim* targ){
 
 // more general version - can be used with > 2 peaks, with non-equal sigmas and weights
 Binning_spec* construct_binning_spec(int n_bins, const Target_1dim* targ_1d, double xlo, double xhi){ 
-  double* bin_boundaries = (double*)malloc((n_bins+1)*sizeof(double));
+  double* bin_boundaries = (double*)calloc((n_bins+1), sizeof(double));
   int n_modes = targ_1d->n_modes;
   Target_peak_1dim* peaks = targ_1d->peaks;
   double integral = integral_f_1dim(targ_1d, xlo, xhi);
@@ -628,7 +645,7 @@ Binning_spec* construct_binning_spec(int n_bins, const Target_1dim* targ_1d, dou
     bin_boundaries[i] = find_bin_upper_edge( targ_1d, xlo, i*p_bin);
   }
   bin_boundaries[n_bins] = xhi;
-  Binning_spec* binning_spec = (Binning_spec*)malloc(sizeof(Binning_spec));
+  Binning_spec* binning_spec = (Binning_spec*)calloc(1, sizeof(Binning_spec));
   binning_spec->n_bins = n_bins;
   binning_spec->x_lo = xlo;
   binning_spec->x_hi = xhi;
@@ -638,7 +655,7 @@ Binning_spec* construct_binning_spec(int n_bins, const Target_1dim* targ_1d, dou
 }
 
 Binning_spec* construct_binning_spec_old(int n_bins, const Target_1dim* targ_1d){
-  double* bin_boundaries = (double*)malloc((n_bins+1)*sizeof(double));
+  double* bin_boundaries = (double*)calloc((n_bins+1), sizeof(double));
   // printf("n_bins: %i \n", n_bins);
   int n_modes = targ_1d->n_modes;
   Target_peak_1dim* peaks = targ_1d->peaks;
@@ -691,7 +708,7 @@ Binning_spec* construct_binning_spec_old(int n_bins, const Target_1dim* targ_1d)
   }
   double p_top_bin = 1.0 - gsl_cdf_gaussian_P(bin_boundaries[n_bins-1]-position, sig);
   printf("# %6i  %12.7g  %12.7g %12.7g %12.7g  %12.7g\n", n_bins-1, bin_boundaries[n_bins-1], INFINITY, p+peak1_prob-pinc, p_top_bin, 0.0 );
-  Binning_spec* binning_spec = (Binning_spec*)malloc(sizeof(Binning_spec));
+  Binning_spec* binning_spec = (Binning_spec*)calloc(1, sizeof(Binning_spec));
   binning_spec->n_bins = n_bins;
   binning_spec->x_lo = -INFINITY;
   binning_spec->x_hi = INFINITY;
@@ -725,7 +742,7 @@ int x_to_bin(const Binning_spec* bin_spec, double x){ // 1-dim
 
 int* i_array_from_x_array(const Binning_spec* bins, int Ndim, double* x_array){
   //int* i_array_from_x_array(int Ndim, double* x_array){
-  int* i_array = (int*)malloc(Ndim*sizeof(int));
+  int* i_array = (int*)calloc(Ndim, sizeof(int));
   for(int i=0; i<Ndim; i++){
     //   printf("i, x[i]: %i %g \n", i, x_array[i]);
     i_array[i] = x_to_bin(bins, x_array[i]); // i_from_x(x_array[i]);

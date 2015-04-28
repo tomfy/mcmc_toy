@@ -10,6 +10,7 @@ extern FILE* g_tvd_vs_gen_fstream;
 extern FILE* g_run_params_fstream;
 
 extern long g_n_pi_evaluations;
+extern long g_max_pi_evaluations;
 
 #define M_PI (3.14159265358979323846)
 #define SQRT2PI  (sqrt(2.0*M_PI))

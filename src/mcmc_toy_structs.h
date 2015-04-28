@@ -83,6 +83,7 @@ typedef struct
   double temperature;
   double rate; // probability per generation of doing a within-T step.
   int within_T_steps_taken; // number of within-T update steps done so far in this chain. (can be less than generation if rate < 1)
+  int generation;
   int n_try;
   int n_accept;
   //  int n_reject;
@@ -101,9 +102,10 @@ typedef struct
   Ndim_histogram* mcmc_out_reflected_hist; // pts reflected into all-positive orthant
 
   int n_old_gees;
-  int n_recent_gees;
-  double* old_mcmcgees; // for now just holds the zeroth components of all the points.
-  double* recent_mcmcgees; 
+  
+  double* old_gees; // for now just holds the zeroth components of all the points.
+  int n_next_block_gees;
+  double* next_block_gees; 
   //  Multi_T_chain* parent_multi_T_chain;
 } Single_T_chain;
 

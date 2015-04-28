@@ -22,6 +22,7 @@ FILE* g_tvd_vs_gen_fstream;
 FILE* g_run_params_fstream;
 
 long g_n_pi_evaluations;
+long g_max_pi_evaluations;
 
 // main:
 int main(int argc, char* argv[]){
@@ -142,9 +143,9 @@ next_arg--;
     }
     printf("before construct_multi_T...\n");
     Multi_T_chain* multi_T_chain = construct_multi_T_chain(n_temperatures, temperatures, rates, proposals, states, &the_bin_set, chain_type);
- printf("after construct_multi_T...\n");
+    // printf("after construct_multi_T...\n");
     g_n_pi_evaluations = 0;
-    int max_pi_evaluations = mcmc_steps; // for now
+    g_max_pi_evaluations = mcmc_steps; // for now
   // ********** do burn-in ***********
     for(int n=0; n<burn_in_steps; n++){
       multi_T_chain_within_T_mcmc_step(multi_T_chain);
@@ -155,23 +156,23 @@ next_arg--;
       // take a mcmc step
       multi_T_chain_within_T_mcmc_step(multi_T_chain);  
 
-      printf("after multiT withinT step \n");
+      //   printf("after multiT withinT step \n");
       for(int i=0; i<n_temperatures-1; i++){
 	for(int j=i+1; j<n_temperatures; j++){
-	  printf("i, j: %i %i \n", i, j);
+	  //  printf("i, j: %i %i \n", i, j);
 	  multi_T_chain_T_swap_mcmc_step(multi_T_chain, i, j);
-	  printf("after multiT T swap...\n");
+	  //  printf("after multiT T swap...\n");
 	}
       } 
       //  fprintf(stderr, "n: %i \n", n);
-      if(g_n_pi_evaluations >= max_pi_evaluations){ break; }
+      if(g_n_pi_evaluations >= g_max_pi_evaluations){ break; }
     }
-    printf("ZZZZZZZZZZ before multi_T_chain_output_tvd.\n");
+    //  printf("ZZZZZZZZZZ before multi_T_chain_output_tvd.\n");
     multi_T_chain_output_tvd(multi_T_chain);
 
     /* tvd_sum += tvd; */
     /* tvdsq_sum += tvd*tvd; */
-    printf("before free_multi...\n");
+    // printf("before free_multi...\n");
     free_multi_T_chain(multi_T_chain);
     //  } // end loop over reps
   // printf("after reps loop...\n");
