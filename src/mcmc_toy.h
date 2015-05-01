@@ -16,9 +16,9 @@ extern long g_max_pi_evaluations;
 #define SQRT2PI  (sqrt(2.0*M_PI))
 #define ONEOVERSQRT2PI  (1.0/sqrt(2.0*M_PI))
 
-#define OUTPUT_SAMPLES (1)
+#define OUTPUT_SAMPLES (0)
 #define FIRST_SUMMARY_GEN (1000)
-#define SUMMARY_GEN_FACTOR (1.3)
+#define SUMMARY_GEN_FACTOR (2.0)
 // #define DO_TVD (1)
 
 // function declarations:

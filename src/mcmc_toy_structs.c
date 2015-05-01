@@ -29,9 +29,9 @@ void free_state(State* s){
 }
 
 // Single_T_chain
-Single_T_chain* construct_single_T_chain(double T, double rate, Proposal P, State* S, const Binning_spec_set* bins, const char* type){
+Single_T_chain* construct_single_T_chain(int chain_number, double T, double rate, Proposal P, State* S, const Binning_spec_set* bins, const char* type){
   Single_T_chain* single_T_chain = (Single_T_chain*)calloc(1, sizeof(Single_T_chain));
- 
+  single_T_chain->chain_number = chain_number;
   single_T_chain->current_state = S;
   single_T_chain->sum_x = (double*)calloc(S->n_dimensions, sizeof(double));
   single_T_chain->temperature = T;
@@ -48,6 +48,7 @@ Single_T_chain* construct_single_T_chain(double T, double rate, Proposal P, Stat
   single_T_chain->dsq_sum = 0.0;
   single_T_chain->n_jumps = 1;
   single_T_chain->type = type;
+  single_T_chain->first_tvd_etc_out_done = 0;
  
     single_T_chain->mcmc_out_hist = construct_ndim_histogram(S->n_dimensions, bins->ndim_bins);
    single_T_chain->mcmc_out_1d0_hist = construct_ndim_histogram(1, bins->onedim_bins);
@@ -148,50 +149,55 @@ void single_T_chain_histogram_current_state(Single_T_chain* chain){
 }
 
 void single_T_chain_output_tvd(Single_T_chain* chain){
-
+  if(! chain->first_tvd_etc_out_done){
+    fprintf(g_tvd_vs_gen_fstream, "# n_pi_evals   gen   n_try  n_accept  ");
+    fprintf(g_tvd_vs_gen_fstream, "  tvd_ndim  tvd_orth   tvd_refl   tvd_1d1   tvd_1dall ");
+    fprintf(g_tvd_vs_gen_fstream, "     dmusq      ksd      edfs      sq_avg_q      sq_avg_p      T \n");
+    chain->first_tvd_etc_out_done = 1;
+  }
   double* all_gees = (double*)calloc(chain->generation, sizeof(double));
   int n_recent_gees = chain->generation - chain->n_old_gees; // number of states stored in next_block (i.e. after old_gees)
   assert(n_recent_gees == chain->n_next_block_gees || g_n_pi_evaluations >= g_max_pi_evaluations );
-  qsort(chain->next_block_gees, chain->n_next_block_gees, sizeof(double), cmpfunc);
+  qsort(chain->next_block_gees, n_recent_gees, sizeof(double), cmpfunc);
   if(chain->old_gees == NULL){
-    all_gees = copy_array(chain->n_next_block_gees, chain->next_block_gees);
+    all_gees = copy_array(n_recent_gees, chain->next_block_gees);
   }else{
-    all_gees = merge_sorted_arrays(chain->n_old_gees, chain->old_gees, chain->n_next_block_gees, chain->next_block_gees);
+    all_gees = merge_sorted_arrays(chain->n_old_gees, chain->old_gees, n_recent_gees, chain->next_block_gees);
   }
-  if(fabs(chain->temperature - 1.0) < 1e-10){ // only output cold-chain info.
-  fprintf(g_tvd_vs_gen_fstream, "%8i %8i %8i %8ld  ", chain->within_T_steps_taken, chain->n_try, chain->n_accept, g_n_pi_evaluations);
+  if(chain->chain_number == 0){ // only output cold-chain info.
+    fprintf(g_tvd_vs_gen_fstream, "%8ld %8i %8i %8i  ", g_n_pi_evaluations, chain->generation, chain->n_try, chain->n_accept);
 
   // tvds cols 5-9
   if(chain->mcmc_out_hist != NULL){
     double tvd = total_variation_distance(g_targprobs_ndim, chain->mcmc_out_hist);
-    fprintf(g_tvd_vs_gen_fstream, "%10.7g  ", tvd);
+    fprintf(g_tvd_vs_gen_fstream, "%10.7g ", tvd);
     tvd = total_variation_distance(g_targprobs_orthants, chain->mcmc_out_orthants_hist);
-    fprintf(g_tvd_vs_gen_fstream, "%10.7g  ", tvd);
+    fprintf(g_tvd_vs_gen_fstream, "%10.7g ", tvd);
     tvd = total_variation_distance(g_targprobs_one_orthant, chain->mcmc_out_reflected_hist);
-    fprintf(g_tvd_vs_gen_fstream, "%10.7g  ", tvd);
+    fprintf(g_tvd_vs_gen_fstream, "%10.7g ", tvd);
     tvd = total_variation_distance(g_targprobs_1dim, chain->mcmc_out_1d0_hist);
     fprintf(g_tvd_vs_gen_fstream, "%10.7g ", tvd);
     tvd = total_variation_distance(g_targprobs_1dim, chain->mcmc_out_1dall_hist);
-    fprintf(g_tvd_vs_gen_fstream, "%10.7g ", tvd);
+    fprintf(g_tvd_vs_gen_fstream, "%10.7g  ", tvd);
   }
 
   double dmusq = 0.0;
   for(int i=0; i<chain->current_state->n_dimensions; i++){ 
-    double dmu = chain->sum_x[i]/chain->within_T_steps_taken - g_targ_1d->mean; //  muhat - mu
+    double dmu = chain->sum_x[i]/chain->generation - g_targ_1d->mean; //  muhat - mu
     dmusq += dmu*dmu; // get square of (muhat - mu) vector.
   } 
   double KSD =   // anderson_darling_statistic2(chain->within_T_steps_taken, all_gees, cdf);
-    Kolmogorov_smirnov_D_statistic_1_sample(chain->within_T_steps_taken, all_gees, cdf);
+    Kolmogorov_smirnov_D_statistic_1_sample(chain->generation, all_gees, cdf);
   //  double ADS = anderson_darling_statistic(chain->within_T_steps_taken, all_gees, cdf);
-  double EDFS = edf_statistic(chain->within_T_steps_taken, all_gees, cdf);
+  double EDFS = edf_statistic(chain->generation, all_gees, cdf);
   // cols 10-14
-  fprintf(g_tvd_vs_gen_fstream, "%10.7g  %10.7g  %10.7g  %10.7g  %10.7g  %10.8g  ",  
-	  dmusq, KSD, EDFS, pow(chain->sum_q/chain->within_T_steps_taken, 2.0), chain->sum_p/chain->within_T_steps_taken, 
+  fprintf(g_tvd_vs_gen_fstream, "%10.7g %10.7g %10.7g %10.7g %10.7g %10.7g  ",  
+	  dmusq, KSD, EDFS, pow(chain->sum_q/chain->generation, 2.0), chain->sum_p/chain->generation, 
 	  chain->temperature);
   fprintf(g_tvd_vs_gen_fstream, "\n");
   }
  
-  if(chain->old_gees != NULL){  printf("before free old_gees \n"); free(chain->old_gees); }
+  if(chain->old_gees != NULL){ free(chain->old_gees); }
   chain->old_gees = all_gees;
   chain->n_old_gees = chain->generation; // chain->n_old_gees + chain->n_next_block_gees;
   free(chain->next_block_gees);
@@ -213,8 +219,9 @@ Multi_T_chain* construct_multi_T_chain(int n_temperatures, double* temperatures,
   multi_T_chain->generation = 0;
   multi_T_chain->count_within_T_updates = 0;
   multi_T_chain->coupled_chains = (Single_T_chain**)calloc(n_temperatures, sizeof(Single_T_chain*));
+  multi_T_chain->temperature_swap_tries_accepts = construct_ndim_array_of_int(2, multi_T_chain->n_temperatures, 0);
   for(int i=0; i<n_temperatures; i++){
-    multi_T_chain->coupled_chains[i] = construct_single_T_chain(temperatures[i], rates[i], proposals[i], states[i], bins, type);
+    multi_T_chain->coupled_chains[i] = construct_single_T_chain(i, temperatures[i], rates[i], proposals[i], states[i], bins, type);
   }
   return multi_T_chain;
 }
@@ -230,7 +237,7 @@ void multi_T_chain_within_T_mcmc_step(Multi_T_chain* multi_T_chain){
     chain->sum_q += g_shortrange(chain->current_state);
     chain->sum_p += chain->current_state->prob; 
     chain->generation++; // generation increments whether a particular chain does a within_T step or not.
-    single_T_chain_histogram_current_state(chain);
+    if(i==0 /* || (chain->generation % (i+1) == 0 */){ single_T_chain_histogram_current_state(chain); }
     int j = chain->generation - chain->n_old_gees - 1;
     assert(j < chain->n_next_block_gees && j >= 0);
     chain->next_block_gees[j] = g(chain->current_state);
@@ -241,7 +248,7 @@ void multi_T_chain_within_T_mcmc_step(Multi_T_chain* multi_T_chain){
   for(int i=0; i<multi_T_chain->n_temperatures; i++){
     Single_T_chain* chain = multi_T_chain->coupled_chains[i];
     if(OUTPUT_SAMPLES){
-      printf("%6i  %11.8f %11.8g ", chain->within_T_steps_taken, chain->temperature, chain->current_state->prob); 
+      printf("%6i  %11.8f %11.8g ", chain->generation, chain->temperature, chain->current_state->prob); 
       print_array_of_double(n_dim, chain->current_state->point); printf(" ");
       printf("\n");
     }   
@@ -260,21 +267,41 @@ void multi_T_chain_T_swap_mcmc_step(Multi_T_chain* multi_T_chain, int i_c, int i
   double T_h = hot->temperature;
   double pr_c =  cold->current_state->prob;
   double pr_h =  hot->current_state->prob;
-  if( (pr_h > pr_c)  ||  (drand() < pow( (pr_h/pr_c), (1.0/T_c - 1.0/T_h) ) ) ){ 
+  int ich[2] = {i_c, i_h};
+  int ihc[2] = {i_h, i_c};
+  int* pch = get_pointer_to_int_element(multi_T_chain->temperature_swap_tries_accepts, ich);
+  (*pch)++;
+  if( (pr_h > pr_c)  ||  (drand() < pow( (pr_h/pr_c), (1.0/T_c - 1.0/T_h) ) ) ){ // accept
     State* swap_state = cold->current_state;
     cold->current_state = hot->current_state;
     hot->current_state = swap_state;
+ int* phc = get_pointer_to_int_element(multi_T_chain->temperature_swap_tries_accepts, ihc);
+ (*phc)++;
   }
 }
 
 void multi_T_chain_output_tvd(Multi_T_chain* multi_T_chain){
   for(int i=0; i<multi_T_chain->n_temperatures; i++){
-    printf("in multi_T output tvd. i: %i \n", i);
     single_T_chain_output_tvd(multi_T_chain->coupled_chains[i]);
   }
   multi_T_chain->next_summary_generation = (int)(multi_T_chain->summary_generation * SUMMARY_GEN_FACTOR);
 }
-
+void multi_T_chain_output_within_T_accept_info(Multi_T_chain* multi_T_chain){
+  for(int i=0; i<multi_T_chain->n_temperatures; i++){
+    Single_T_chain* chain = multi_T_chain->coupled_chains[i];
+    printf("# T: %10.6g  %8i %8i   %8i %8i \n", chain->temperature, chain->n_try_1, chain->n_accept_1, chain->n_try_2, chain->n_accept_2);
+  }
+}
+void multi_T_chain_output_swap_info(Multi_T_chain* multi_T_chain){
+  for(int i=0; i<multi_T_chain->n_temperatures; i++){
+    printf("# %12.5f  ", multi_T_chain->coupled_chains[i]->temperature);
+    for(int j=0; j<multi_T_chain->n_temperatures; j++){
+      int ij[2] = {j, i};
+      int* p = get_pointer_to_int_element(multi_T_chain->temperature_swap_tries_accepts, ij);
+      printf("%8i ", *p);
+    }printf("\n");
+  }
+}
 void free_multi_T_chain(Multi_T_chain* chain){
   for(int i = 0; i<chain->n_temperatures; i++){
     free_single_T_chain(chain->coupled_chains[i]);
@@ -527,11 +554,15 @@ Ndim_array_of_int* construct_ndim_array_of_int(int Ndim, int Nsize, int init_val
 int* get_pointer_to_int_element(Ndim_array_of_int* A, int* index_array){
   int Ndim = A->Ndim;
   Ndim_array_of_int* B = A;
+  //  printf("index array ");
   for(int j=0; j<Ndim-1; j++){
     B = ((Ndim_array_of_int**)B->array)[index_array[j]];
+    //  printf(" %i ", index_array[j]);
   }
   // at this point, B should point to 1 dim 'Ndim_array_of_int', whose array field is a regular array of double:
   int* array_of_int = (int*)B->array;
+  //  printf(" %i \n", index_array[Ndim-1] ); 
+  //  printf(" value: %i \n", array_of_int[index_array[Ndim-1]]);;
   return array_of_int + index_array[Ndim-1];
 }
 

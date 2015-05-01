@@ -19,13 +19,18 @@ my $n_dimensions = 1;
 my $peaks_string = '-0.5, 0.1, 0.5; 0.5, 0.1, 0.5';
 my $n_peaks;
 my $temperatures_string = '1.0';
-my $rates_string = '1.0';
-my $proposals_string = 'gaussian, 1.0, 1.4, 1.0'; # if multiple proposals, separate with ; e.g. 'gaussian 0.07 1.5 0.9; gaussian ... '
+my $rates_string = '';
+my $proposals_string = ''; # 'gaussian, 1.0, 1.4, 1.0'; # if multiple proposals, separate with ; e.g. 'gaussian 0.07 1.5 0.9; gaussian ... '
 #my %n_bins_hash = (1 => 4096, 2 => 64, 3 => 16, 4 => 8);
 my $n_bins = 4;			# $n_bins_hash{$n_dimensions};
 my $n_bins_1d = 360;
 my $chain_type = "mcmc";	# or "iid"
 my $n_reps = 8;
+my $t_factor_exponent = 0.5;    # t_factor is 2**t_factor_exponent
+my $min_n_temperatures = 1;
+my $max_n_temperatures = 5;
+my $cool_rate = 1.0; # total rate of all chains except hottest, rel to hottest rate. 
+#my $max_n_temperatures = 8.01;
 GetOptions(
 	   'n_dimensions=i' => \$n_dimensions,
 	   'peaks=s' => \$peaks_string, # e.g. '-0.5,0.05,0.5;0.5,0.05,0.5'  -> 2 peaks
@@ -38,6 +43,10 @@ GetOptions(
 	   'n_burnin=i' => \$n_burn_in,
 	   'type=s' => \$chain_type,
 	   'n_reps=i' => \$n_reps,
+           'min_n_temperatures=i' => \$min_n_temperatures,
+           'max_n_temperatures=i' => \$max_n_temperatures,
+           't_factor_exponent=f' => \$t_factor_exponent, 
+           'cool_rate=f' => \$cool_rate, 
 	  );
 
 # 'optimal' (for peak jumping) sigma_prop is A*x(d)  where d is n_dimensions, A is peak spacing;
@@ -46,56 +55,88 @@ my %ndim_sig_opt_deltafunction = (1 => 1.000, 2 => 0.8121, 3 => 0.7190, 4 => 0.6
 				  6 => 5454, 7 => 0.4811, 8 => 0.4075, 9 => 0.3597, 10 => 0.0.3303,
 				  11 => 0.3095, 12 => 0.2934, 13 => 0.2802, 14 => 0.2690, 15 => 0.2593,
 				  16 => 0.2507, 17 => 0.2429, 18 => 0.2360, 19 => 0.2296, 20 => 0.2237,
-				 ); 
-my @peak_strings = split(";", $peaks_string);
-$n_peaks = scalar @peak_strings;
-for (@peak_strings) {
-   s/,/ /g;
-}
-my $target_peak_sigma = 0.1;
-if ($peak_strings[0] =~ /^\s*(\S+)\s+(\S+)/) {
-   $target_peak_sigma = $2;
-}
-print "# proposals string: $proposals_string \n";
+				 );
 
-my $prop_sig_1 = $ndim_sig_opt_deltafunction{$n_dimensions}; # 'opt' peak jumping sigma (peak spacing of 1)
-my $prop_sig_2 = 2.38*$target_peak_sigma/sqrt($n_dimensions); # 'opt' withing peak sigma
-my $prop_p1 = 0.9;
-$temperatures_string =~ s/[,;]/ /g;
-$rates_string =~ s/[,;]/ /g;
-my @temperatures = split(" ", $temperatures_string);
-my $n_temperatures = scalar @temperatures;
-my @rates = split(" ", $rates_string);
-my @proposal_strings = split(";", $proposals_string);
-my @param_values = ();
-for (@proposal_strings) {
-   if (s/MULTI\(([^)]*)\)/MULTI/) { # e.g. -proposals 'gaussian MULTI(0.5,0.7,1.0) 0.15 0.7; gaussian 1.0 0.15 0.9
-      @param_values = split(/[, ]+/, $1);
-      print "param values: ", join(';', @param_values), "\n";
+my $t_factor = 2.0**$t_factor_exponent;
+my $n_temperatures;
+for ($n_temperatures =1; $n_temperatures <= $max_n_temperatures; $n_temperatures++) {
+   my @peak_strings = split(";", $peaks_string);
+   $n_peaks = scalar @peak_strings;
+   for (@peak_strings) {
+      s/,/ /g;
    }
-   s/[,]/ /g;
-}
-while (scalar @proposal_strings < scalar @temperatures) {
-   push @proposal_strings, $proposal_strings[scalar @proposal_strings -1]; # duplicate last proposal to get enough
-}
+   my $target_peak_sigma = 0.1;
+   if ($peak_strings[0] =~ /^\s*(\S+)\s+(\S+)/) {
+      $target_peak_sigma = $2;
+   }
+   # print "# proposals string: $proposals_string \n";
 
-my $proto_arg_string = "$n_dimensions  $n_peaks  ";
-$proto_arg_string .= join("  ", @peak_strings) . "  ";
-$proto_arg_string .= " $n_generations  ";
-$proto_arg_string .= "$n_temperatures ";
-for my $i (0..$n_temperatures-1) {
-   my $T = $temperatures[$i];
-   my $rate = $rates[$i];
-   $proto_arg_string .= "$T $rate " . $proposal_strings[$i] . "  ";
-}
-$proto_arg_string .= "$n_bins  $n_bins_1d  ";
+   my $prop_sig_1 = $ndim_sig_opt_deltafunction{$n_dimensions}; # 'opt' peak jumping sigma (peak spacing of 1) for T = 1
+   my $prop_sig_2 = 2.38*$target_peak_sigma/sqrt($n_dimensions); # 'opt' within peak sigma for T = 1
+   my $prop_p1 = 0.9;
+   $temperatures_string =~ s/[,;]/ /g;
+   $rates_string =~ s/[,;]/ /g;
+   my @temperatures = (1.0);
+   while (scalar @temperatures < $n_temperatures) { # set up geometric sequence of T's 
+      my $next_temperature = $temperatures[-1]*$t_factor;
+      push @temperatures, $next_temperature;
+   }
 
-srand();
-for my $param_val (@param_values) {
+   my @rates = ();
+   if ($rates_string) {
+      @rates = split(" ", $rates_string);
+   } else {
+      if ($n_temperatures == 1) {
+         @rates = (1.0);
+      } else {
+         my $crate = $cool_rate/($n_temperatures-1);
+         @rates = (($crate) x ($n_temperatures-1));
+         push @rates, 1.0;
+      }
+   }
+
+   my @proposal_strings = ();
+   if ($proposals_string) {
+      @proposal_strings = split(";", $proposals_string);
+   } else {
+      if ($n_temperatures == 1) {
+         my $propstr = "gaussian  $prop_sig_1  " . $prop_sig_2*sqrt($temperatures[0]) . " " . 1.0/($cool_rate+1.0);
+         push @proposal_strings, $propstr;
+      } else {
+         while ( my($i, $T) = each @temperatures) {
+            my $pr1 = ($i==($n_temperatures-1))? 1.0 : 0.0;
+            my $propstr = "gaussian  $prop_sig_1  " . $prop_sig_2*sqrt($T) . " " . $pr1;
+            #  print "XXX $propstr \n";
+            push @proposal_strings, $propstr;
+         }
+      }
+   }
+
+   # print "temperatures: ", join(", ", @temperatures), "\n";
+   # print "rates: ", join(", ", @rates), "\n";
+   # print "proposals: ", join(", ", @proposal_strings), "\n";
+
+
+   my $proto_arg_string = "$n_dimensions  $n_peaks  ";
+   $proto_arg_string .= join("  ", @peak_strings) . "  ";
+   $proto_arg_string .= " $n_generations  ";
+   $proto_arg_string .= "$n_temperatures ";
+   for my $i (0..$n_temperatures-1) {
+      my $T = $temperatures[$i];
+      my $rate = $rates[$i];
+      $proto_arg_string .= "$T $rate " . $proposal_strings[$i] . "  ";
+   }
+   $proto_arg_string .= "$n_bins  $n_bins_1d  ";
+
+   #srand();
+   #for my $n_temperatures ($min_n_temperatures .. $max_n_temperatures) {
+
+
    my $the_arg_string = $proto_arg_string;
-   $the_arg_string =~ s/MULTI/$param_val/; # substitute in the particular param value.
-
-   trials($the_arg_string, $n_reps, $param_val);
+   #  $the_arg_string =~ s/MULTI/$param_val/; # substitute in the particular param value.
+   print "# $the_arg_string \n";
+   trials($the_arg_string, $n_reps, $n_temperatures);
+   #}
 }
 
 sub trials{
@@ -160,21 +201,23 @@ sub trials{
       my $tvd_vs_gen_string = `cat tvd_etc_vs_gen`;
       my @tvd_vs_gen_lines = split("\n", $tvd_vs_gen_string);
       my @cols;
-      for (@tvd_vs_gen_lines) {
-         next if(/^\s*#/);      # skip comments
-         @cols = split(" ", $_);
+      while (my($i, $tvd_etc_line) = each@tvd_vs_gen_lines) {
+         next if($tvd_etc_line =~ /^\s*#/); # skip comments
+         @cols = split(" ", $tvd_etc_line);
          ($n_pi_eval, $n_gens, $n_try, $n_accept, # 0-3
           $ndim_tvd, $orthant_tvd, $refl_tvd, $oned_tvd, $onedall_tvd, # 4-8
           $dmu_sq, $ksd, $efds, $sq_of_mean_q, $mean_p) # 9-13
            = @cols[0..13];
-         $gen_avgdmusq{$n_gens} += $dmu_sq;
-         $gen_avgksd{$n_gens} += $ksd;
-         $gen_avgefds{$n_gens} += $efds;
-         $gen_avgorthtvd{$n_gens} += $orthant_tvd;
-         $gen_avg1dim1tvd{$n_gens} += $oned_tvd;
-         $gen_avg1dimalltvd{$n_gens} += $onedall_tvd;
+         my $key = ($i == scalar @tvd_vs_gen_lines-1)? $n_generations : $n_gens; # $n_pi_eval;
+         $gen_avgdmusq{$key} += $dmu_sq;
+         $gen_avgksd{$key} += $ksd;
+         $gen_avgefds{$key} += $efds;
+         $gen_avgorthtvd{$key} += $orthant_tvd;
+         $gen_avg1dim1tvd{$key} += $oned_tvd;
+         $gen_avg1dimalltvd{$key} += $onedall_tvd;
       }
 
+      #   system "tail -1 tvd_etc_vs_gen";
       #   print "$sig1 ", join("  ", @cols), "\n"; 
       #   die "n generations inconsistency: $n_generations, $n_gens \n" if($n_gens != $n_generations);
       push @n_tries, $n_try;
@@ -193,8 +236,8 @@ sub trials{
 
       push @onedim1_tvds, $oned_tvd;
       push @onedimall_tvds, $onedall_tvd;
-   }				# loop over reps
-   open my $fh1, ">", "avg_nreps_tvdetc_vs_gen_param_" . $param_val;
+   }                                             # loop over reps
+   open my $fh1, ">", "avg_nreps_tvdetc_vs_gen"; # _param_" . $param_val;
    my @sgens = sort {$a <=> $b} keys %gen_avgdmusq;
 
    for (@sgens) {
@@ -203,7 +246,8 @@ sub trials{
           $gen_avgorthtvd{$_}/$n_reps, $gen_avg1dim1tvd{$_}/$n_reps,  $gen_avg1dimalltvd{$_}/$n_reps;
    }
    close $fh1;
-
+   my $run_params = `cat run_params`;
+   printf("$run_params");
    printf("# averages based on $n_reps reps. \n");
    printf("%10.6g  ", $param_val);
    printf("%8i  ", $n_generations);
@@ -221,7 +265,7 @@ sub trials{
    printf("%10.6g +- %8.4g  ", mean(@efdss), stddev(@efdss)/sqrt(scalar @efdss));
    printf("%10.6g +- %8.4g  ", mean(@sq_of_mean_qs), stddev(@sq_of_mean_qs)/sqrt(scalar @sq_of_mean_qs));
    printf("%10.6g +- %8.4g  ", mean(@mean_ps), stddev(@mean_ps)/sqrt(scalar @mean_ps));
-   print "\n\n";
+   print "\n";
 }
 
 sub dx_histograms{

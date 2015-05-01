@@ -55,9 +55,10 @@ int main(int argc, char* argv[]){
 
   char run_param_string[10000];
   int next_arg = 3 + 3*targ_1d->n_modes;
-  int burn_in_steps; // = atoi(argv[next_arg]);
+  int burn_in_steps = 0; // = atoi(argv[next_arg]);
 next_arg--;
   int mcmc_steps = atoi(argv[next_arg+1]); next_arg--;
+  //  printf("mcmc_steps to do: %i \n", mcmc_steps);
   // int n_replicates = atoi(argv[next_arg+2]);
   fprintf(g_run_params_fstream,"# burn-in, mcmc steps: %i %i \n", burn_in_steps, mcmc_steps);
   int n_temperatures = atoi(argv[next_arg+3]);
@@ -138,6 +139,8 @@ next_arg--;
       if(g_n_pi_evaluations >= g_max_pi_evaluations){ break; }
     }
     multi_T_chain_output_tvd(multi_T_chain);
+    multi_T_chain_output_within_T_accept_info(multi_T_chain);
+    multi_T_chain_output_swap_info(multi_T_chain);
     free_multi_T_chain(multi_T_chain);
   fflush(stdout);
   free_ndim_histogram(targprobs_ndim);

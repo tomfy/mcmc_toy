@@ -75,6 +75,7 @@ typedef struct
 
 typedef struct
 {
+  int chain_number; // 0 for coldest chain, 1 for next ...
   const char* type; // "mcmc" or "iid"
   State* current_state;
   double* sum_x; // sum over generations of point vector
@@ -95,6 +96,7 @@ typedef struct
   int n_jumps;
   Proposal proposal; // each T can have its own proposal
   
+  int first_tvd_etc_out_done; 
   Ndim_histogram* mcmc_out_hist;
   Ndim_histogram* mcmc_out_1d0_hist; // 1dim, 0th component, 
   Ndim_histogram* mcmc_out_1dall_hist; // 1dim, all components
@@ -117,6 +119,7 @@ typedef struct
   int summary_generation; // tvd, ksd have been done up through this generation
   int next_summary_generation; // tvd, ksd will next be done after this generation
   int count_within_T_updates; 
+  Ndim_array_of_int* temperature_swap_tries_accepts;
 } Multi_T_chain;
 
 typedef struct
@@ -133,7 +136,7 @@ State* construct_state(int n_dimensions, const Target_1dim* targ_1d, double temp
 void free_state(State* s);
 
 // Single_T_chain
-Single_T_chain* construct_single_T_chain(double T, double rate, Proposal P, State* S, const Binning_spec_set* bins, const char* type);
+Single_T_chain* construct_single_T_chain(int chain_number, double T, double rate, Proposal P, State* S, const Binning_spec_set* bins, const char* type);
 State* single_T_chain_mcmc_step(Single_T_chain* chain);
 void single_T_chain_histogram_current_state(Single_T_chain* chain);
 void single_T_chain_output_tvd(Single_T_chain* chain);
@@ -143,6 +146,8 @@ Multi_T_chain* construct_multi_T_chain(int n_temperatures, double* temperatures,
 void multi_T_chain_within_T_mcmc_step(Multi_T_chain* multi_T_chain);
 void multi_T_chain_T_swap_mcmc_step(Multi_T_chain* multi_T_chain, int i_c, int i_h);
 void multi_T_chain_output_tvd(Multi_T_chain* multi_T_chain);
+void multi_T_chain_output_within_T_accept_info(Multi_T_chain* multi_T_chain);
+void multi_T_chain_output_swap_info(Multi_T_chain* multi_T_chain);
 void free_multi_T_chain(Multi_T_chain* chain);
 // Ndim_histogram
 Ndim_histogram* construct_ndim_histogram(int n_dim, const Binning_spec* bins); //(int Ndim, int Ngrid_max);
