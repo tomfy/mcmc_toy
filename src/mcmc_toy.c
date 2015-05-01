@@ -325,7 +325,7 @@ void print_array_of_double(int Nsize, double* array){
 
 double draw_1dim(const Target_1dim* targ_1d, double temperature){
   double w_T_sum = 0.0;
-  double safety_factor = 1.01;
+  double safety_factor = 1.4;
   int n_modes = targ_1d->n_modes;
   assert(targ_1d->normalized);
   Target_peak_1dim* peaks = targ_1d->peaks;
