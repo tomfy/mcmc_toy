@@ -30,6 +30,7 @@ my $t_factor_exponent = 0.5;    # t_factor is 2**t_factor_exponent
 my $min_n_temperatures = 1;
 my $max_n_temperatures = 5;
 my $cool_rate = 1.0; # total rate of all chains except hottest, rel to hottest rate. 
+my $neighbor_swap_only = 0;
 #my $max_n_temperatures = 8.01;
 GetOptions(
 	   'n_dimensions=i' => \$n_dimensions,
@@ -46,7 +47,8 @@ GetOptions(
            'min_n_temperatures=i' => \$min_n_temperatures,
            'max_n_temperatures=i' => \$max_n_temperatures,
            't_factor_exponent=f' => \$t_factor_exponent, 
-           'cool_rate=f' => \$cool_rate, 
+           'cool_rate=f' => \$cool_rate,
+           'neighbor_swap_only=i' => \$neighbor_swap_only,
 	  );
 
 # 'optimal' (for peak jumping) sigma_prop is A*x(d)  where d is n_dimensions, A is peak spacing;
@@ -59,7 +61,9 @@ my %ndim_sig_opt_deltafunction = (1 => 1.000, 2 => 0.8121, 3 => 0.7190, 4 => 0.6
 
 my $t_factor = 2.0**$t_factor_exponent;
 my $n_temperatures;
-for ($n_temperatures =1; $n_temperatures <= $max_n_temperatures; $n_temperatures++) {
+print "$min_n_temperatures $max_n_temperatures \n";
+for ($n_temperatures = $min_n_temperatures; $n_temperatures <= $max_n_temperatures; $n_temperatures++) {
+print "XXXXX: $n_temperatures \n";
    my @peak_strings = split(";", $peaks_string);
    $n_peaks = scalar @peak_strings;
    for (@peak_strings) {
@@ -174,11 +178,11 @@ sub trials{
    my %t_dxhists = ();
    for (1..$n_reps) {
       my $seed = int(rand(1000000)); # get seed for mcmc_toy rng
-      system "~/mcmc_toy/src/mcmc_toy  $the_arg_string  $seed  'mcmc' >  mcmc_toy_samples_tmp";
+      system "~/mcmc_toy/src/mcmc_toy  $the_arg_string  $seed  'mcmc' $neighbor_swap_only >  mcmc_toy_samples_tmp";
 
       # histogram jump distances, if samples were output
       my $samples_out_lines = `wc mcmc_toy_samples_tmp`;
-      if (($samples_out_lines =~ /^\s*(\S+)/) and ($1 > 40)) {
+      if (($samples_out_lines =~ /^\s*(\S+)/) and ($1 > 400)) {
          my $mt_out_string = `cat mcmc_toy_samples_tmp`;
          dx_histograms($mt_out_string, \%t_dxhists);
          open my $fhdxh, ">", "dxhist_$param_val";
@@ -195,7 +199,7 @@ sub trials{
 
 
       #my ($n_gens, $n_accept, $dmu_sq, $ksd, $ads, $mean_q, $mean_p, $ndim_tvd, $orthant_tvd, $refl_tvd, $oned_tvd);
-      my ( $n_pi_eval, $n_gens, $n_try, $n_accept, # 0-3
+      my ( $nT, $Thot, $rate, $n_pi_eval, $n_gens, $n_try, $n_accept, # 0-3
            $ndim_tvd, $orthant_tvd, $refl_tvd, $oned_tvd, $onedall_tvd, # 4-8
            $dmu_sq, $ksd, $efds, $sq_of_mean_q, $mean_p);
       my $tvd_vs_gen_string = `cat tvd_etc_vs_gen`;
@@ -204,10 +208,10 @@ sub trials{
       while (my($i, $tvd_etc_line) = each@tvd_vs_gen_lines) {
          next if($tvd_etc_line =~ /^\s*#/); # skip comments
          @cols = split(" ", $tvd_etc_line);
-         ($n_pi_eval, $n_gens, $n_try, $n_accept, # 0-3
+         ($nT, $Thot, $rate, $n_pi_eval, $n_gens, $n_try, $n_accept, # 0-3
           $ndim_tvd, $orthant_tvd, $refl_tvd, $oned_tvd, $onedall_tvd, # 4-8
           $dmu_sq, $ksd, $efds, $sq_of_mean_q, $mean_p) # 9-13
-           = @cols[0..13];
+           = @cols[0..16];
          my $key = ($i == scalar @tvd_vs_gen_lines-1)? $n_generations : $n_gens; # $n_pi_eval;
          $gen_avgdmusq{$key} += $dmu_sq;
          $gen_avgksd{$key} += $ksd;

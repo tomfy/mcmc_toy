@@ -84,7 +84,8 @@ next_arg--;
   fprintf(g_run_params_fstream,"#  n_bins: %i n_bins_1d: %i \n", n_bins, n_bins_1d);
   int seed = atoi(argv[next_arg+2]);
   const char* chain_type = argv[next_arg+3];
- 
+  int neighbor_swap_only = atoi(argv[next_arg+4]); // 0 -> do all swaps; 1 -> only swap neighboring temperature chains.
+  fprintf(g_run_params_fstream, "# seed: %i  chain_type: %s neighbor_swap_only: %i \n", seed, chain_type, neighbor_swap_only);
   // *************** set up RNG *****************
 
   gsl_rng_env_setup();
@@ -134,6 +135,7 @@ next_arg--;
       for(int i=0; i<n_temperatures-1; i++){
 	for(int j=i+1; j<n_temperatures; j++){
 	  multi_T_chain_T_swap_mcmc_step(multi_T_chain, i, j);
+          if(neighbor_swap_only){ break; }
 	}
       } 
       if(g_n_pi_evaluations >= g_max_pi_evaluations){ break; }
