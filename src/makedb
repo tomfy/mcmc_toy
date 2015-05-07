@@ -1,0 +1,10 @@
+mcmc_toy: mcmc_toy.o mcmc_toy_structs.o mcmc_toy.h mcmc_toy_structs.h
+	gcc -std=c99 -o mcmc_toy mcmc_toy.o mcmc_toy_structs.o -lm -lgsl -lgslcblas
+
+mcmc_toy.o: mcmc_toy.c mcmc_toy.h mcmc_toy_structs.h
+	gcc -std=c99 -c mcmc_toy.c -g 
+
+mcmc_toy_structs.o: mcmc_toy_structs.c mcmc_toy_structs.h mcmc_toy.h
+	gcc -std=c99 -c mcmc_toy_structs.c -g 
+
+

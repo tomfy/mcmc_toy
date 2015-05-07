@@ -187,7 +187,7 @@ void single_T_chain_output_tvd(Single_T_chain* chain){
   //  double ADS = anderson_darling_statistic(chain->within_T_steps_taken, all_gees, cdf);
   double EDFS = edf_statistic(chain->generation, all_gees, cdf);
   // cols 10-14
-  fprintf(g_tvd_vs_gen_fstream, "%10.7g %10.7g %10.7g %10.7g %10.7g %10.7g  ",  
+  fprintf(g_tvd_vs_gen_fstream, "%10.7g %10.7g %10.7g %10.7g %10.7g %8.4g  ",  
 	  dmusq, KSD, EDFS, pow(chain->sum_q/chain->generation, 2.0), chain->sum_p/chain->generation, 
 	  chain->temperature);
   fprintf(g_tvd_vs_gen_fstream, "\n");
@@ -293,11 +293,11 @@ void multi_T_chain_output_tvd(Multi_T_chain* multi_T_chain){
     Single_T_chain* chain = multi_T_chain->coupled_chains[i];
  if(! chain->first_tvd_etc_out_done){
     //  fprintf(g_tvd_vs_gen_fstream, "# n_T T_hot rate n_pi_evals   gen   n_try  n_accept  ");
-    fprintf(g_tvd_vs_gen_fstream, "#      nT   T_hot   cold_rate  n_pi_eval   gen  n_try  n_acc   tvd_ndim  tvd_orth   tvd_refl   tvd_1d1   tvd_1dall ");
-    fprintf(g_tvd_vs_gen_fstream, "     dmusq      ksd      edfs      sq_avg_q      sq_avg_p      T \n");
+    fprintf(g_tvd_vs_gen_fstream, "#  nT     T_hot    cold_rate  n_pi_eval  gen    n_try    n_acc    tvd_ndim   tvd_orth   tvd_refl   tvd_1d1   tvd_1dall ");
+    fprintf(g_tvd_vs_gen_fstream, "    dmusq      ksd       edfs       sq_avg_q    sq_avg_p      T \n");
     chain->first_tvd_etc_out_done = 1;
   }
-    fprintf(g_tvd_vs_gen_fstream, "%8i %10.7g %10.7g ", n_temperatures, T_hot, cold_rate); 
+    fprintf(g_tvd_vs_gen_fstream, "%5i %9.4f %10.7g ", n_temperatures, T_hot, cold_rate); 
     single_T_chain_output_tvd(chain);
     //  }
     // multi_T_chain->next_summary_generation = (int)(multi_T_chain->summary_generation * SUMMARY_GEN_FACTOR);

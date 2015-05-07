@@ -128,16 +128,19 @@ next_arg--;
       multi_T_chain_within_T_mcmc_step(multi_T_chain);
     } 
 
+    int n_tswap_every = 1;
     // ********** do post-burn-in *********
     for(int n=1; n<=mcmc_steps; n++){   
       // take an mcmc step
       multi_T_chain_within_T_mcmc_step(multi_T_chain);  
+      if(n % n_tswap_every == 0){
       for(int i=0; i<n_temperatures-1; i++){
 	for(int j=i+1; j<n_temperatures; j++){
 	  multi_T_chain_T_swap_mcmc_step(multi_T_chain, i, j);
           if(neighbor_swap_only){ break; }
 	}
       } 
+      }
       if(g_n_pi_evaluations >= g_max_pi_evaluations){ break; }
     }
     multi_T_chain_output_tvd(multi_T_chain);
@@ -211,11 +214,17 @@ double f_1dim_T(const Target_1dim* targ_1d, double x, double temperature){ // ea
   int n_modes = targ_1d->n_modes;
   Target_peak_1dim* peaks = targ_1d->peaks;
   double f = 0.0;
+  //  double fx = 0.0;
   for(int i=0; i<n_modes; i++){
     double X = (x-peaks[i].position)/peaks[i].sigma;
-    f += pow(ONEOVERSQRT2PI*exp(-0.5 * X*X) * peaks[i].weight/peaks[i].sigma, 1.0/temperature);
+    f += pow(ONEOVERSQRT2PI * peaks[i].weight/peaks[i].sigma, 1.0/temperature) 
+      * exp(-0.5 * X*X/temperature);
+
+    //   fx += pow(ONEOVERSQRT2PI*exp(-0.5 * X*X) * peaks[i].weight/peaks[i].sigma, 1.0/temperature);
+    //   fprintf(stderr, "YddYYY: %i  %g  %g   %g %g   %g %g \n", i, x, X,  f, fx, exp(-0.5*X*X/temperature), pow(exp(-0.5*X*X), 1.0/temperature));
     //   printf("i, x, X, position, sigma: %i %8.5f %8.5f %8.5f %8.5f \n", i, x, X, g_peaks[i].position, g_peaks[i].sigma);
   }
+  //  fprintf(stderr, "YYYY: %g   %g %g \n", x, f, fx); 
   return f;
 }
 
@@ -327,7 +336,7 @@ void print_array_of_double(int Nsize, double* array){
 
 double draw_1dim(const Target_1dim* targ_1d, double temperature){
   double w_T_sum = 0.0;
-  double safety_factor = 1.4;
+  double safety_factor = 1.02;
   int n_modes = targ_1d->n_modes;
   assert(targ_1d->normalized);
   Target_peak_1dim* peaks = targ_1d->peaks;
@@ -345,6 +354,9 @@ double draw_1dim(const Target_1dim* targ_1d, double temperature){
 	double x = gsl_ran_gaussian(g_rng, sqrt(temperature)*peaks[i].sigma) + peaks[i].position;
 	double mixture_of_heated_peaks = f_1dim_T(targ_1d, x, temperature);
 	double heated_mixture_of_peaks = pow(f_1dim(targ_1d, x), 1.0/temperature);
+      /* if(!(safety_factor*mixture_of_heated_peaks >= heated_mixture_of_peaks)){ */
+      /*   fprintf(stderr, "XXXXXXX %g  %g %g %g \n", x, safety_factor, mixture_of_heated_peaks, heated_mixture_of_peaks); */
+      /*   } */
 		assert(safety_factor*mixture_of_heated_peaks >= heated_mixture_of_peaks);
 	// rejection sampling	
 		if( drand()*safety_factor*mixture_of_heated_peaks < heated_mixture_of_peaks){  // accept 

@@ -26,10 +26,11 @@ my $n_bins = 4;			# $n_bins_hash{$n_dimensions};
 my $n_bins_1d = 360;
 my $chain_type = "mcmc";	# or "iid"
 my $n_reps = 8;
-my $t_factor = 1.0;
-my $t_factor_exponent = undef;    # t_factor is 2**t_factor_exponent
-my $min_n_temperatures = 1;
-my $max_n_temperatures = 5;
+my $n_factors = 12;
+my $t_factor_factor = 2**0.25;
+#my $t_factor_exponent = undef;    # t_factor is 2**t_factor_exponent
+my $n_temperatures = 1;
+#my $max_n_temperatures = 5;
 my $cool_rate = 1.0; # total rate of all chains except hottest, rel to hottest rate. 
 my $neighbor_swap_only = 1;
 #my $max_n_temperatures = 8.01;
@@ -45,10 +46,11 @@ GetOptions(
 	   'n_burnin=i' => \$n_burn_in,
 	   'type=s' => \$chain_type,
 	   'n_reps=i' => \$n_reps,
-           'min_n_temperatures=i' => \$min_n_temperatures,
-           'max_n_temperatures=i' => \$max_n_temperatures,
-           't_factor=f' => \$t_factor,
-           't_factor_exponent=f' => \$t_factor_exponent, 
+           'n_temperatures=i' => \$n_temperatures,
+       #    'max_n_temperatures=i' => \$max_n_temperatures,
+           'n_factors=i' => \$n_factors,
+           't_factor_factor=f' => \$t_factor_factor,
+    #       't_factor_exponent=f' => \$t_factor_exponent, 
            'cool_rate=f' => \$cool_rate,
            'neighbor_swap_only=i' => \$neighbor_swap_only,
 	  );
@@ -61,10 +63,18 @@ my %ndim_sig_opt_deltafunction = (1 => 1.000, 2 => 0.8121, 3 => 0.7190, 4 => 0.6
 				  16 => 0.2507, 17 => 0.2429, 18 => 0.2360, 19 => 0.2296, 20 => 0.2237,
 				 );
 
-$t_factor = 2.0**$t_factor_exponent if(defined $t_factor_exponent);
-my $n_temperatures;
-print "# $min_n_temperatures $max_n_temperatures \n";
-for ($n_temperatures = $min_n_temperatures; $n_temperatures <= $max_n_temperatures; $n_temperatures++) {
+#$t_factor = 2.0**$t_factor_exponent if(defined $t_factor_exponent);
+# my $n_temperatures;
+# print "# $min_n_temperatures $max_n_temperatures \n";
+#for ($n_temperatures = $min_n_temperatures; $n_temperatures <= $max_n_temperatures; $n_temperatures++) {
+
+my $tf = $t_factor_factor;
+my @t_factors = ($tf);
+for(2..$n_factors){
+   $tf *= $t_factor_factor;
+   push @t_factors, $tf;
+}
+for my $t_factor (@t_factors){ 
 print "# $n_temperatures \n";
    my @peak_strings = split(";", $peaks_string);
    $n_peaks = scalar @peak_strings;
@@ -95,7 +105,7 @@ print "# $n_temperatures \n";
       if ($n_temperatures == 1) {
          @rates = (1.0);
       } else {
-         my $crate = $cool_rate/($n_temperatures-1);
+         my $crate = $cool_rate; # /($n_temperatures-1); 
          @rates = (($crate) x ($n_temperatures-1));
          push @rates, 1.0;
       }
@@ -138,10 +148,12 @@ print "# $n_temperatures \n";
    #for my $n_temperatures ($min_n_temperatures .. $max_n_temperatures) {
 
 
+my $T_hot = $temperatures[-1];
+my $p_string = "$T_hot $t_factor";
    my $the_arg_string = $proto_arg_string;
    #  $the_arg_string =~ s/MULTI/$param_val/; # substitute in the particular param value.
-   print "# $the_arg_string \n";
-   trials($the_arg_string, $n_reps, $n_temperatures);
+   print "# arg string: \n#$the_arg_string \n";
+   trials($the_arg_string, $n_reps, $p_string);
    #}
 }
 
@@ -255,7 +267,7 @@ sub trials{
    my $run_params = `cat run_params`;
    printf("$run_params");
    printf("# averages based on $n_reps reps. \n");
-   printf("%10.6g  ", $param_val);
+   printf("%s   ", $param_val);
    printf("%8i  ", $n_generations);
    printf("%10.6g +- %8.4g  ", sum(@n_accepts)/sum(@n_tries), stddev(@n_accepts)/mean(@n_tries)/sqrt(scalar @n_accepts));
    printf("%10.6g +- %8.4g  ", mean(@n_pi_evals), stddev(@n_pi_evals)/sqrt(scalar @n_pi_evals));
