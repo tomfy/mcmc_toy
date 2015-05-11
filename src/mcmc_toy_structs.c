@@ -19,8 +19,8 @@ State* construct_state(int n_dimensions, const Target_1dim* targ_1d, double temp
   for(int i=0; i<n_dimensions; i++){
     the_state->point = draw_ndim(n_dimensions, targ_1d, temperature); // draw from target distribution
   }
-  the_state->prob = f_ndim(targ_1d, n_dimensions, the_state->point);
-  the_state->log_prob = log_f_ndim(targ_1d, n_dimensions, the_state->point);
+  the_state->prob = (USELOGPROB)? -1.0 : f_ndim(targ_1d, n_dimensions, the_state->point);
+  the_state->log_prob = (USELOGPROB)? log_f_ndim(targ_1d, n_dimensions, the_state->point) : 0.0;
   return the_state;
 }
 
@@ -78,16 +78,16 @@ State* single_T_chain_mcmc_step(Single_T_chain* chain){
   Proposal prop = chain->proposal;
   int which_prop; // 1 or 2
   double* prop_x_array = propose(Ndim, x_array, &prop, &which_prop);
-  double p_of_proposed_state = f_ndim(g_targ_1d, Ndim, prop_x_array);
-  double log_p_of_proposed_state = log_f_ndim(g_targ_1d, Ndim, prop_x_array);
+  double p_of_proposed_state = (USELOGPROB)? -1.0 : f_ndim(g_targ_1d, Ndim, prop_x_array);
+  double log_p_of_proposed_state = (USELOGPROB)? log_f_ndim(g_targ_1d, Ndim, prop_x_array) : 0.0;
   //  printf("log(p), log_p: %g %g %g \n\n", log(p_of_proposed_state), log_p_of_proposed_state, fabs(log(p_of_proposed_state) - log_p_of_proposed_state) );
   /* if(fabs(log(p_of_proposed_state) - log_p_of_proposed_state) > 1e-10){ */
   /*   fprintf(stderr, "log(p), log_p: %g %g %g \n", log(p_of_proposed_state), log_p_of_proposed_state, fabs(log(p_of_proposed_state) - log_p_of_proposed_state) ); */
   /*   //  exit(1); */
   /* } */
 
-  double p_of_proposed_state_T = pow( p_of_proposed_state, inverse_T );
-  double log_p_of_proposed_state_T = log_p_of_proposed_state*inverse_T;
+  double p_of_proposed_state_T = (USELOGPROB)? -1.0 : pow( p_of_proposed_state, inverse_T );
+  double log_p_of_proposed_state_T = (USELOGPROB)? log_p_of_proposed_state*inverse_T : 0.0;
   int n_jumps = 0;
   double dsq = 0;
 
