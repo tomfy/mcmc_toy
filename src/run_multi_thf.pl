@@ -234,7 +234,7 @@ sub trials{
           $ndim_tvd, $orthant_tvd, $refl_tvd, $oned_tvd, $onedall_tvd, # 4-8
           $dmu_sq, $ksd, $efds, $sq_of_mean_q, $mean_p) # 9-13
            = @cols[0..16];
-         my $key = ($i == scalar @tvd_vs_gen_lines-1)? $n_generations : $n_gens; # $n_pi_eval;
+         my $key = $n_pi_eval;
          $gen_avgdmusq{$key} += $dmu_sq;
          $gen_avgksd{$key} += $ksd;
          $gen_avgefds{$key} += $efds;

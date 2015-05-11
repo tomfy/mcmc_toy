@@ -20,6 +20,7 @@ State* construct_state(int n_dimensions, const Target_1dim* targ_1d, double temp
     the_state->point = draw_ndim(n_dimensions, targ_1d, temperature); // draw from target distribution
   }
   the_state->prob = f_ndim(targ_1d, n_dimensions, the_state->point);
+  the_state->log_prob = log_f_ndim(targ_1d, n_dimensions, the_state->point);
   return the_state;
 }
 
@@ -73,33 +74,45 @@ State* single_T_chain_mcmc_step(Single_T_chain* chain){
   
   double* x_array = the_state->point;
   double p_of_current_state_T = pow( the_state->prob, inverse_T ); // the_state->prob is the T=1 prob.
-
+  
   Proposal prop = chain->proposal;
   int which_prop; // 1 or 2
   double* prop_x_array = propose(Ndim, x_array, &prop, &which_prop);
   double p_of_proposed_state = f_ndim(g_targ_1d, Ndim, prop_x_array);
-  double p_of_proposed_state_T = pow( p_of_proposed_state, inverse_T );
+  double log_p_of_proposed_state = log_f_ndim(g_targ_1d, Ndim, prop_x_array);
+  //  printf("log(p), log_p: %g %g %g \n\n", log(p_of_proposed_state), log_p_of_proposed_state, fabs(log(p_of_proposed_state) - log_p_of_proposed_state) );
+  /* if(fabs(log(p_of_proposed_state) - log_p_of_proposed_state) > 1e-10){ */
+  /*   fprintf(stderr, "log(p), log_p: %g %g %g \n", log(p_of_proposed_state), log_p_of_proposed_state, fabs(log(p_of_proposed_state) - log_p_of_proposed_state) ); */
+  /*   //  exit(1); */
+  /* } */
 
+  double p_of_proposed_state_T = pow( p_of_proposed_state, inverse_T );
+  double log_p_of_proposed_state_T = log_p_of_proposed_state*inverse_T;
   int n_jumps = 0;
   double dsq = 0;
 
   // prop ratio is 1 for symmetric proposal
   if(strcmp(chain->type, "mcmc") == 0){ // mcmc step
-    if((p_of_proposed_state_T > p_of_current_state_T) || (p_of_proposed_state_T > drand() * p_of_current_state_T)){ // accept
+    int accept = (USELOGPROB)?
+      ((log_p_of_proposed_state > the_state->log_prob) || (log(drand()) < inverse_T*(log_p_of_proposed_state - the_state->log_prob))) :
+      ((p_of_proposed_state_T > p_of_current_state_T) || (p_of_proposed_state_T > drand() * p_of_current_state_T));
+    if(accept){ // accept
       double h0max = 0.0;   // count if jumped from < 0.5 to > 0.5 in x and y
       for(int i=0; i<Ndim; i++){
-	if( ( the_state->point[i] <= h0max  && prop_x_array[i] > h0max ) 
-	    || ( the_state->point[i] > h0max  &&  prop_x_array[i] <= h0max ) ){ 
-	  n_jumps++;
-	}
-	double d = the_state->point[i] - prop_x_array[i];
-	dsq += d*d;
+        if( ( the_state->point[i] <= h0max  && prop_x_array[i] > h0max ) 
+            || ( the_state->point[i] > h0max  &&  prop_x_array[i] <= h0max ) ){ 
+          n_jumps++;
+        }
+        double d = the_state->point[i] - prop_x_array[i];
+        dsq += d*d;
       }
       // set state to the proposed state:
       free(the_state->point); 
       the_state->point = prop_x_array;
       the_state->prob = p_of_proposed_state;
+      the_state->log_prob = log_p_of_proposed_state;
       chain->n_accept++;
+      //      fprintf(stderr, "which_prop, naccept 1,2: %i %i %i   %g\n", which_prop, chain->n_accept_1, chain->n_accept_2, chain->temperature);
       if(which_prop == 1){ chain->n_accept_1++; }else{ chain->n_accept_2++; }
     }else{ 
       // reject proposed move. 
@@ -115,6 +128,7 @@ State* single_T_chain_mcmc_step(Single_T_chain* chain){
     free(the_state->point);
     the_state->point = exact_xs;
     the_state->prob = f_ndim(g_targ_1d, Ndim, exact_xs);
+    the_state->log_prob = log_f_ndim(g_targ_1d, Ndim, exact_xs);
     chain->n_accept++;
   }  
 
@@ -271,11 +285,16 @@ void multi_T_chain_T_swap_mcmc_step(Multi_T_chain* multi_T_chain, int i_c, int i
   double T_h = hot->temperature;
   double pr_c =  cold->current_state->prob;
   double pr_h =  hot->current_state->prob;
+  double log_pr_c = cold->current_state->log_prob;
+  double log_pr_h = hot->current_state->log_prob;
   int ich[2] = {i_c, i_h};
   int ihc[2] = {i_h, i_c};
   int* pch = get_pointer_to_int_element(multi_T_chain->temperature_swap_tries_accepts, ich);
   (*pch)++;
-  if( (pr_h > pr_c)  ||  (drand() < pow( (pr_h/pr_c), (1.0/T_c - 1.0/T_h) ) ) ){ // accept
+  int accept = (USELOGPROB)?
+    ( (log_pr_h > log_pr_c) || (log(drand()) <  (1.0/T_c - 1.0/T_h)*(log_pr_h - log_pr_c) ) ) :
+    ( (pr_h > pr_c)  ||  (drand() < pow( (pr_h/pr_c), (1.0/T_c - 1.0/T_h) ) ) ); 
+    if(accept){ // accept
     State* swap_state = cold->current_state;
     cold->current_state = hot->current_state;
     hot->current_state = swap_state;

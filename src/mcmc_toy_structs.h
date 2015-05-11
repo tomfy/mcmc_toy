@@ -63,6 +63,7 @@ typedef struct
   //  int* ipoint; // ipoint[0] = x index [0,Ngrid_max], ipoint[1] = y index, etc.
   double* point; //
   double prob; // 
+  double log_prob; // natural log of the prob density.
 } State;
 
 typedef struct

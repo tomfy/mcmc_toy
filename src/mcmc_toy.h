@@ -16,9 +16,11 @@ extern long g_max_pi_evaluations;
 #define SQRT2PI  (sqrt(2.0*M_PI))
 #define ONEOVERSQRT2PI  (1.0/sqrt(2.0*M_PI))
 
-#define OUTPUT_SAMPLES (0)
+#define OUTPUT_SAMPLES (1)
 #define FIRST_SUMMARY_GEN (1000)
 #define SUMMARY_GEN_FACTOR (2.0)
+
+#define USELOGPROB (1)
 // #define DO_TVD (1)
 
 // function declarations:
@@ -33,6 +35,8 @@ void print_array_of_double(int Nsize, double* array);
 Ndim_histogram* init_target_distribution(int Ndim, int Ngrid_max, int normalize, const Binning_spec* bins);
 double f_1dim (const Target_1dim* targ_1d, double x);
 double f_ndim(const Target_1dim* targ_1d, int Ndim, double* x_array);
+double log_f_ndim(const Target_1dim* targ_1d, int n_dim, double* x_array);
+double log_f_1dim(const Target_1dim* targ_1d, double x);
 double draw_1dim(const Target_1dim* targ_1d, double temperature);
 double* draw_ndim(int n_dim, const Target_1dim* targ_1d, double temperature);
 double integral_f_1dim(const Target_1dim* targ_1d, double x, double y); // integral from x to y

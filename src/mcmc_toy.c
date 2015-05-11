@@ -134,12 +134,12 @@ next_arg--;
       // take an mcmc step
       multi_T_chain_within_T_mcmc_step(multi_T_chain);  
       if(n % n_tswap_every == 0){
-      for(int i=0; i<n_temperatures-1; i++){
-	for(int j=i+1; j<n_temperatures; j++){
-	  multi_T_chain_T_swap_mcmc_step(multi_T_chain, i, j);
-          if(neighbor_swap_only){ break; }
-	}
-      } 
+        for(int i=0; i<n_temperatures-1; i++){
+          for(int j=i+1; j<n_temperatures; j++){
+            multi_T_chain_T_swap_mcmc_step(multi_T_chain, i, j);
+            if(neighbor_swap_only){ break; }
+          }
+        } 
       }
       if(g_n_pi_evaluations >= g_max_pi_evaluations){ break; }
     }
@@ -192,10 +192,20 @@ double f_ndim(const Target_1dim* targ_1d, int n_dim, double* x_array){ // just p
     //  double x = x_array[i];
     result *= f_1dim(targ_1d, x_array[i]);
   }
-  //  printf("x p: %12.6g %12.6g \n", x_array[0], result);
+  //  printf("log(p): %12.6g\n", log(result));
   g_n_pi_evaluations++; // just count the number of times this function has been called
   return result;
 }    
+double log_f_ndim(const Target_1dim* targ_1d, int n_dim, double* x_array){ // just log of product over dimensions of f_1dim
+ double result = 0.0;
+  for(int i=0; i<n_dim; i++){
+    //  double x = x_array[i];
+    result += log_f_1dim(targ_1d, x_array[i]);
+  }
+  // printf("logp %12.6g \n", result);
+  g_n_pi_evaluations++; // just count the number of times this function has been called
+  return result;
+}  
 
 double f_1dim(const Target_1dim* targ_1d, double x){ // 
   int n_modes = targ_1d->n_modes;
@@ -208,6 +218,40 @@ double f_1dim(const Target_1dim* targ_1d, double x){ //
   }
   return f*ONEOVERSQRT2PI; // to normalize such that integral from -inf to +inf is sum(weights)
 }
+
+double log_f_1dim(const Target_1dim* targ_1d, double x){
+  int n_modes = targ_1d->n_modes;
+  Target_peak_1dim* peaks = targ_1d->peaks;
+  double f = 0.0;
+  double* log_ys = (double*)malloc(n_modes*sizeof(double));
+  double max_log_y, min_log_y;
+  double min_y;
+  double max_y;
+  for(int i=0; i<n_modes; i++){
+    double X = (x-peaks[i].position)/peaks[i].sigma;
+    double y = exp(-0.5 * X*X) * peaks[i].weight/peaks[i].sigma;
+    f += y;
+    log_ys[i] = -0.5*X*X + log(peaks[i].weight/peaks[i].sigma);
+    if(i == 0  || log_ys[i] < min_log_y){ min_log_y = log_ys[i]; min_y = y; }
+    if(i == 0  || log_ys[i] > max_log_y){ max_log_y = log_ys[i]; max_y = y; }
+    //   printf("i, x, X, position, sigma: %i %8.5f %8.5f %8.5f %8.5f \n", i, x, X, g_peaks[i].position, g_peaks[i].sigma);
+  }
+  if(max_y > 1e-15){
+    //  printf("branch 0  %g %g %g %g\n", max_log_y, log(f/max_y), log(ONEOVERSQRT2PI), log(f));
+    return max_log_y + log(f/max_y) + log(ONEOVERSQRT2PI);
+  }else if(min_log_y > -INFINITY){
+    //  printf("branch 1\n");
+    double sum = 0.0;
+    for(int i=0; i<n_modes; i++){
+      sum += exp(log_ys[i] - max_log_y); 
+    }
+    return  max_log_y + log(sum) + log(ONEOVERSQRT2PI);
+  }else{
+    //   printf("branch 2\n");
+    return -INFINITY;
+  }
+}
+
 
 double f_1dim_T(const Target_1dim* targ_1d, double x, double temperature){ // each component of mixture is raised to 1/T, then summed
   // this is upper bound to f_1dim**(1/T)
