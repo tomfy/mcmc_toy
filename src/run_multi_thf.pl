@@ -12,11 +12,13 @@ my $epsilon = 1e-6;
 
 # analysis parameters
 # n_bins
+unlink("avg_nreps_tvdetc_vs_gen");
+unlink("avg_accept_info");
 
 my $n_generations = 100000;
 my $n_burn_in = 0;
 my $n_dimensions = 1;
-my $peaks_string = '-0.5, 0.1, 0.5; 0.5, 0.1, 0.5';
+my $peaks_string = '-0.5, 0.0125, 0.5; 0.5, 0.0125, 0.5';
 my $n_peaks;
 my $temperatures_string = '1.0';
 my $rates_string = '';
@@ -48,11 +50,11 @@ GetOptions(
 	   'type=s' => \$chain_type,
 	   'n_reps=i' => \$n_reps,
            'n_temperatures=i' => \$n_temperatures,
-       #    'max_n_temperatures=i' => \$max_n_temperatures,
+           #    'max_n_temperatures=i' => \$max_n_temperatures,
            'n_factors=i' => \$n_factors,
            'f_t_hot=f' => \$f_t_hot,
            'max_t_hot=f' => \$max_t_hot,
-    #       't_factor_exponent=f' => \$t_factor_exponent, 
+           #       't_factor_exponent=f' => \$t_factor_exponent, 
            'cool_rate=f' => \$cool_rate,
            'neighbor_swap_only=i' => \$neighbor_swap_only,
 	  );
@@ -78,8 +80,8 @@ my %ndim_sig_opt_deltafunction = (1 => 1.000, 2 => 0.8121, 3 => 0.7190, 4 => 0.6
 # }
 #for my $t_factor (@t_factors){ 
 my $Thot = 1.0;
-   while($Thot < $max_t_hot*$f_t_hot){
-print "# $n_temperatures \n";
+while ($Thot < $max_t_hot*$f_t_hot) {
+   print "# $n_temperatures \n";
    my @peak_strings = split(";", $peaks_string);
    $n_peaks = scalar @peak_strings;
    for (@peak_strings) {
@@ -96,14 +98,14 @@ print "# $n_temperatures \n";
    my $prop_p1 = 0.9;
    $temperatures_string =~ s/[,;]/ /g;
    $rates_string =~ s/[,;]/ /g;
-#print "n temperatures: $n_temperatures \n";
+   #print "n temperatures: $n_temperatures \n";
    my @temperatures = ((1.0) x ($n_temperatures));
-if($n_temperatures > 1){
-   while (my ($i, $T) = each @temperatures) { # set up geometric sequence of T's 
-      $temperatures[$i] = $Thot**($i/($n_temperatures-1));
+   if ($n_temperatures > 1) {
+      while (my ($i, $T) = each @temperatures) { # set up geometric sequence of T's 
+         $temperatures[$i] = $Thot**($i/($n_temperatures-1));
+      }
    }
-}
-#print "temperatures: ", join(", ", @temperatures), "\n";
+   print "temperatures: ", join(", ", @temperatures), "\n";
    my @rates = ();
    if ($rates_string) {
       @rates = split(" ", $rates_string);
@@ -155,17 +157,17 @@ if($n_temperatures > 1){
    #for my $n_temperatures ($min_n_temperatures .. $max_n_temperatures) {
 
 
-my $T_hot = $temperatures[-1];
-my $p_string = "$T_hot ";
+   my $T_hot = $temperatures[-1];
+   my $p_string = "$T_hot ";
    my $the_arg_string = $proto_arg_string;
    #  $the_arg_string =~ s/MULTI/$param_val/; # substitute in the particular param value.
    print "# arg string: \n#$the_arg_string \n";
    trials($the_arg_string, $n_reps, $p_string);
    #}
-$Thot *= $f_t_hot;
+   $Thot *= $f_t_hot;
 }
 
-sub trials{
+sub trials{                  # do multiple runs with same parameters, 
    my $the_arg_string = shift;
    my $n_reps = shift;
    my $param_val = shift;
@@ -193,34 +195,24 @@ sub trials{
    my %gen_avg1dimalltvd = ();
    #  print "# the arg string: $the_arg_string \n";
    #  my $mu = 0.0; # get from run_params file - may not always be zero!
-   my %dmus = (); # $dmus{$i} is array_ref to array of dmus for component $i
+ #  my %dmus = (); # $dmus{$i} is array_ref to array of dmus for component $i
    # for (0..$n_dimensions-1) {
    #   $dmus{$_} = [];		# $mu[$_] = 0;
    # }
-   my %t_dxhists = ();
+  # my %t_dxhists = ();
+
+   my %type_npieval_avgerr = ('dmusq' => {}, 'ksd' => {}, 'efds' => {}, 'orthtvd' => {}, 'tvd1d' => {}, 'tvd1dall' => {});
+   my %accept_info = ('ntry2' => {}, 'nacc2' => {}, 'nswaptry' => {}, 'nswapacc' => {});
+
+   ### 
+   #  do the replicate runs ...
+
    for (1..$n_reps) {
       my $seed = int(rand(1000000)); # get seed for mcmc_toy rng
       system "~/mcmc_toy/src/mcmc_toy  $the_arg_string  $seed  'mcmc' $neighbor_swap_only >  mcmc_toy_samples_tmp";
 
-      # histogram jump distances, if samples were output
-      my $samples_out_lines = `wc mcmc_toy_samples_tmp`;
-      if (($samples_out_lines =~ /^\s*(\S+)/) and ($1 > 400)) {
-         my $mt_out_string = `cat mcmc_toy_samples_tmp`;
-         dx_histograms($mt_out_string, \%t_dxhists);
-         open my $fhdxh, ">", "dxhist_$param_val";
-         my @stemperatures = sort {$a <=> $b} keys %t_dxhists;
-         my @dxhist0 = @{$t_dxhists{$stemperatures[0]}};
-         print  $fhdxh "# temperature: ", $stemperatures[0], "\n";
-         my $total = 0;
-         while (my ($i, $v) = each @dxhist0) {
-            print $fhdxh "$i $v\n";
-            $total += $v;
-         }
-         print $fhdxh "total $total \n";
-      }
-
-
-      #my ($n_gens, $n_accept, $dmu_sq, $ksd, $ads, $mean_q, $mean_p, $ndim_tvd, $orthant_tvd, $refl_tvd, $oned_tvd);
+      ###
+      #    read in, store, info from  tvd_etc...
       my ( $nT, $Thot, $rate, $n_pi_eval, $n_gens, $n_try, $n_accept, # 0-3
            $ndim_tvd, $orthant_tvd, $refl_tvd, $oned_tvd, $onedall_tvd, # 4-8
            $dmu_sq, $ksd, $efds, $sq_of_mean_q, $mean_p);
@@ -230,26 +222,30 @@ sub trials{
       while (my($i, $tvd_etc_line) = each@tvd_vs_gen_lines) {
          next if($tvd_etc_line =~ /^\s*#/); # skip comments
          @cols = split(" ", $tvd_etc_line);
-         ($nT, $Thot, $rate, $n_pi_eval, $n_gens, $n_try, $n_accept, # 0-3
-          $ndim_tvd, $orthant_tvd, $refl_tvd, $oned_tvd, $onedall_tvd, # 4-8
-          $dmu_sq, $ksd, $efds, $sq_of_mean_q, $mean_p) # 9-13
+         ($nT, $Thot, $rate, $n_pi_eval, $n_gens, $n_try, $n_accept, # 0-6
+          $ndim_tvd, $orthant_tvd, $refl_tvd, $oned_tvd, $onedall_tvd, # 7-11
+          $dmu_sq, $ksd, $efds, $sq_of_mean_q, $mean_p) # 12-16
            = @cols[0..16];
          my $key = $n_pi_eval;
-         $gen_avgdmusq{$key} += $dmu_sq;
-         $gen_avgksd{$key} += $ksd;
-         $gen_avgefds{$key} += $efds;
-         $gen_avgorthtvd{$key} += $orthant_tvd;
-         $gen_avg1dim1tvd{$key} += $oned_tvd;
-         $gen_avg1dimalltvd{$key} += $onedall_tvd;
+         # $gen_avgdmusq{$key} += $dmu_sq;
+         # $gen_avgksd{$key} += $ksd;
+         # $gen_avgefds{$key} += $efds;
+         # $gen_avgorthtvd{$key} += $orthant_tvd;
+         # $gen_avg1dim1tvd{$key} += $oned_tvd;
+         # $gen_avg1dimalltvd{$key} += $onedall_tvd;
+  $type_npieval_avgerr{dmusq}->{$key} += $dmu_sq;
+$type_npieval_avgerr{ksd}->{$key} += $ksd;
+$type_npieval_avgerr{efds}->{$key} += $efds;
+$type_npieval_avgerr{orthtvd}->{$key} += $orthant_tvd;
+$type_npieval_avgerr{tvd1d}->{$key} += $oned_tvd;
+$type_npieval_avgerr{tvd1dall}->{$key} += $onedall_tvd;
+       
       }
 
-      #   system "tail -1 tvd_etc_vs_gen";
-      #   print "$sig1 ", join("  ", @cols), "\n"; 
-      #   die "n generations inconsistency: $n_generations, $n_gens \n" if($n_gens != $n_generations);
+      # store the last tvd etc values (i.e. values at end of each run)
       push @n_tries, $n_try;
       push @n_accepts, $n_accept;
       push @n_pi_evals, $n_pi_eval;
-      #   print "n_pi_evals: ", join("; ", @n_pi_evals), "\n";
       push @ms_dmus, $dmu_sq;
       push @ksds, $ksd;
       push @efdss, $efds;
@@ -262,17 +258,55 @@ sub trials{
 
       push @onedim1_tvds, $oned_tvd;
       push @onedimall_tvds, $onedall_tvd;
-   }                                             # loop over reps
-   open my $fh1, ">", "avg_nreps_tvdetc_vs_gen"; # _param_" . $param_val;
+
+### store acceptance info:    #############
+      store_accept_info('accept_info', \%accept_info);
+
+   }  # end of loop over reps
+
+   my $run_params = `cat run_params`;
+
+   ### output avg over reps of tvdetc_vs_gen ...
+   #
+   open my $fh1, ">>", "avg_nreps_tvdetc_vs_gen"; # _param_" . $param_val;
+   printf $fh1 "$run_params";
    my @sgens = sort {$a <=> $b} keys %gen_avgdmusq;
 
    for (@sgens) {
       printf $fh1 "%8i %10.7g %10.7g %10.7g %10.7g %10.7g %10.7g \n", $_,
-        $gen_avgdmusq{$_}/$n_reps, $gen_avgksd{$_}/$n_reps, $gen_avgefds{$_}/$n_reps, # cols 2-4
-          $gen_avgorthtvd{$_}/$n_reps, $gen_avg1dim1tvd{$_}/$n_reps,  $gen_avg1dimalltvd{$_}/$n_reps;
+#  $gen_avgdmusq{$_}/$n_reps, $gen_avgksd{$_}/$n_reps, $gen_avgefds{$_}/$n_reps, # cols 2-4
+ #         $gen_avgorthtvd{$_}/$n_reps, $gen_avg1dim1tvd{$_}/$n_reps,  $gen_avg1dimalltvd{$_}/$n_reps;
+        $type_npieval_avgerr{dmusq}->{$_}/$n_reps, $type_npieval_avgerr{ksd}->{$_}/$n_reps, $type_npieval_avgerr{efds}->{$_}/$n_reps, 
+# $gen_avgksd{$_}/$n_reps, $gen_avgefds{$_}/$n_reps, # cols 2-4
+#          $gen_avgorthtvd{$_}/$n_reps, $gen_avg1dim1tvd{$_}/$n_reps,  $gen_avg1dimalltvd{$_}/$n_reps;
+$type_npieval_avgerr{orthtvd}->{$_}/$n_reps, $type_npieval_avgerr{tvd1d}->{$_}/$n_reps, $type_npieval_avgerr{tvd1dall}->{$_}/$n_reps
    }
+   printf $fh1 "\n";
    close $fh1;
-   my $run_params = `cat run_params`;
+
+   ### output avg over reps of accept info vs T
+   #
+   open my $fh2, ">>", "avg_accept_info"; # _param_" . $param_val;
+   printf $fh2 "$run_params";
+   my @sTs = sort {$a <=> $b} keys %{$accept_info{ntry2}};
+
+   for my $T (@sTs) {
+      my $acc_rate2 = $accept_info{nacc2}->{$T} / $accept_info{ntry2}->{$T};
+      printf $fh2 ("%10.7g %8i %8i %10.7g  ", # %8i %8i %10.7g \n",
+      $T, $accept_info{ntry2}->{$T}, $accept_info{nacc2}->{$T}, $acc_rate2);
+      if (exists $accept_info{nswaptry}->{$T} and $accept_info{nswaptry}->{$T} > 0) {
+         my $swap_acc_rate = $accept_info{nswapacc}->{$T} / $accept_info{nswaptry}->{$T};
+         printf $fh2 (" %8i %8i %10.7g \n", $accept_info{nswaptry}->{$T}, $accept_info{nswapacc}->{$T}, $swap_acc_rate );
+      }else{
+         printf $fh2 "\n";
+      }
+   }
+   printf $fh2 "\n";
+   close $fh2;
+
+
+
+   #  my $run_params = `cat run_params`;
    printf("$run_params");
    printf("# averages based on $n_reps reps. \n");
    printf("%s   ", $param_val);
@@ -294,46 +328,63 @@ sub trials{
    print "\n";
 }
 
-sub dx_histograms{
-   my $mt_output_string = shift;
-   my $temperature_dxhists = shift; # keys: temperatures, values: arrayref of jumpdistancesquared
-   my $inv_bin_width = 16;
-   my $n_bins = int(3*$inv_bin_width);
-   my @lines = split("\n", $mt_output_string);
-   my $first_line = shift @lines;
-   while ($first_line =~ /^\s*#/) {
-      $first_line = shift @lines;
-   }
-   my @first_line_cols = split(" ", $first_line);
-   my @prev_xs = @first_line_cols[3..scalar @first_line_cols - 1];
-
-   for my $a_line (@lines) {
-      next if($a_line =~ /^\s*#/);
-      #   if($a_line =~ /1.0000/){
+sub store_accept_info{
+   my $accept_info_filename = shift;
+   my $accept_info = shift;     # hashref 
+   my $accept_info_string = `cat $accept_info_filename`;
+   my @accept_info_lines = split("\n", $accept_info_string);
+   for my $a_line (@accept_info_lines) {
       my @cols = split(" ", $a_line);
-      my $gen = shift @cols;
-      my $temperature = shift @cols;
-      #   next if(abs($temperature - 1.0) > 1e-10);
-      #print "T: $temperature \n";
-      my $prob = shift @cols;
-      my @xs = @cols;
-      my $dxsq = 0.0;
-      #   print join(", ", @prev_xs), " :: ", join("; ", @xs), "\n";
-      for (my $i=0; $i<scalar @xs; $i++) {
-         $dxsq += ($xs[$i] - $prev_xs[$i])**2;
+      my $T = $cols[2];
+      $accept_info->{'ntry2'}->{$T} += $cols[5];
+      $accept_info->{'nacc2'}->{$T} += $cols[6];
+      if (scalar @cols >= 9) {
+         $accept_info->{'nswaptry'}->{$T} += $cols[7];
+         $accept_info->{'nswapacc'}->{$T} += $cols[8];
       }
-      #  print "dxsq: $dxsq \n";
-   
-      if (! exists $temperature_dxhists->{$temperature}) {
-         # print "TT: $temperature \n";
-         $temperature_dxhists->{$temperature} = [(0) x $n_bins];
-      }
-      my $bin = int(sqrt($dxsq)*$inv_bin_width);
-      #   print "bin: $bin \n";
-      if ($bin >= $n_bins) {
-         $bin = $n_bins-1;
-      }
-      $temperature_dxhists->{$temperature}->[$bin]++;
-      @prev_xs = @xs;
    }
 }
+
+# sub dx_histograms{
+#    my $mt_output_string = shift;
+#    my $temperature_dxhists = shift; # keys: temperatures, values: arrayref of jumpdistancesquared
+#    my $inv_bin_width = 16;
+#    my $n_bins = int(3*$inv_bin_width);
+#    my @lines = split("\n", $mt_output_string);
+#    my $first_line = shift @lines;
+#    while ($first_line =~ /^\s*#/) {
+#       $first_line = shift @lines;
+#    }
+#    my @first_line_cols = split(" ", $first_line);
+#    my @prev_xs = @first_line_cols[3..scalar @first_line_cols - 1];
+
+#    for my $a_line (@lines) {
+#       next if($a_line =~ /^\s*#/);
+#       #   if($a_line =~ /1.0000/){
+#       my @cols = split(" ", $a_line);
+#       my $gen = shift @cols;
+#       my $temperature = shift @cols;
+#       #   next if(abs($temperature - 1.0) > 1e-10);
+#       #print "T: $temperature \n";
+#       my $prob = shift @cols;
+#       my @xs = @cols;
+#       my $dxsq = 0.0;
+#       #   print join(", ", @prev_xs), " :: ", join("; ", @xs), "\n";
+#       for (my $i=0; $i<scalar @xs; $i++) {
+#          $dxsq += ($xs[$i] - $prev_xs[$i])**2;
+#       }
+#       #  print "dxsq: $dxsq \n";
+   
+#       if (! exists $temperature_dxhists->{$temperature}) {
+#          # print "TT: $temperature \n";
+#          $temperature_dxhists->{$temperature} = [(0) x $n_bins];
+#       }
+#       my $bin = int(sqrt($dxsq)*$inv_bin_width);
+#       #   print "bin: $bin \n";
+#       if ($bin >= $n_bins) {
+#          $bin = $n_bins-1;
+#       }
+#       $temperature_dxhists->{$temperature}->[$bin]++;
+#       @prev_xs = @xs;
+#    }
+# }

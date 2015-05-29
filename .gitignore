@@ -1,4 +1,7 @@
 # ignore object and archive files:
 # .gitignore
+mcmc_toy
 *.[oa]
 *~
+test/
+test_old/
