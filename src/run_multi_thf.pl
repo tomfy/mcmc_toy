@@ -187,12 +187,12 @@ sub trials{                  # do multiple runs with same parameters,
    my @onedim1_tvds = ();
    my @onedimall_tvds = ();
 
-   my %gen_avgdmusq = ();
-   my %gen_avgksd = ();
-   my %gen_avgefds = ();
-   my %gen_avgorthtvd = ();
-   my %gen_avg1dim1tvd = ();
-   my %gen_avg1dimalltvd = ();
+   # my %gen_avgdmusq = ();
+   # my %gen_avgksd = ();
+   # my %gen_avgefds = ();
+   # my %gen_avgorthtvd = ();
+   # my %gen_avg1dim1tvd = ();
+   # my %gen_avg1dimalltvd = ();
    #  print "# the arg string: $the_arg_string \n";
    #  my $mu = 0.0; # get from run_params file - may not always be zero!
    #  my %dmus = (); # $dmus{$i} is array_ref to array of dmus for component $i
@@ -264,7 +264,7 @@ sub trials{                  # do multiple runs with same parameters,
    #
    open my $fh1, ">>", "avg_nreps_tvdetc_vs_gen"; # _param_" . $param_val;
    printf $fh1 "$run_params";
-   my @sgens = sort {$a <=> $b} keys %gen_avgdmusq;
+   my @sgens = sort {$a <=> $b} keys %{$type_npieval_avgerr{dmusq}};
 
    for (@sgens) {
       printf $fh1 "%8i %10.7g %10.7g %10.7g %10.7g %10.7g %10.7g \n", $_,
