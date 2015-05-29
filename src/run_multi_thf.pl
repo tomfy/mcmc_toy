@@ -28,8 +28,8 @@ my $n_bins = 4;			# $n_bins_hash{$n_dimensions};
 my $n_bins_1d = 360;
 my $chain_type = "mcmc";	# or "iid"
 my $n_reps = 8;
-my $n_factors = 12;
-my $f_t_hot = 2;
+# my $n_factors = 12;
+my $f_t_hot = sqrt(2.0);
 my $max_t_hot = 10000;
 #my $t_factor_exponent = undef;    # t_factor is 2**t_factor_exponent
 my $n_temperatures = 1;
@@ -51,7 +51,7 @@ GetOptions(
 	   'n_reps=i' => \$n_reps,
            'n_temperatures=i' => \$n_temperatures,
            #    'max_n_temperatures=i' => \$max_n_temperatures,
-           'n_factors=i' => \$n_factors,
+       #    'n_factors=i' => \$n_factors,
            'f_t_hot=f' => \$f_t_hot,
            'max_t_hot=f' => \$max_t_hot,
            #       't_factor_exponent=f' => \$t_factor_exponent, 
@@ -195,11 +195,11 @@ sub trials{                  # do multiple runs with same parameters,
    my %gen_avg1dimalltvd = ();
    #  print "# the arg string: $the_arg_string \n";
    #  my $mu = 0.0; # get from run_params file - may not always be zero!
- #  my %dmus = (); # $dmus{$i} is array_ref to array of dmus for component $i
+   #  my %dmus = (); # $dmus{$i} is array_ref to array of dmus for component $i
    # for (0..$n_dimensions-1) {
    #   $dmus{$_} = [];		# $mu[$_] = 0;
    # }
-  # my %t_dxhists = ();
+   # my %t_dxhists = ();
 
    my %type_npieval_avgerr = ('dmusq' => {}, 'ksd' => {}, 'efds' => {}, 'orthtvd' => {}, 'tvd1d' => {}, 'tvd1dall' => {});
    my %accept_info = ('ntry2' => {}, 'nacc2' => {}, 'nswaptry' => {}, 'nswapacc' => {});
@@ -227,18 +227,12 @@ sub trials{                  # do multiple runs with same parameters,
           $dmu_sq, $ksd, $efds, $sq_of_mean_q, $mean_p) # 12-16
            = @cols[0..16];
          my $key = $n_pi_eval;
-         # $gen_avgdmusq{$key} += $dmu_sq;
-         # $gen_avgksd{$key} += $ksd;
-         # $gen_avgefds{$key} += $efds;
-         # $gen_avgorthtvd{$key} += $orthant_tvd;
-         # $gen_avg1dim1tvd{$key} += $oned_tvd;
-         # $gen_avg1dimalltvd{$key} += $onedall_tvd;
-  $type_npieval_avgerr{dmusq}->{$key} += $dmu_sq;
-$type_npieval_avgerr{ksd}->{$key} += $ksd;
-$type_npieval_avgerr{efds}->{$key} += $efds;
-$type_npieval_avgerr{orthtvd}->{$key} += $orthant_tvd;
-$type_npieval_avgerr{tvd1d}->{$key} += $oned_tvd;
-$type_npieval_avgerr{tvd1dall}->{$key} += $onedall_tvd;
+         $type_npieval_avgerr{dmusq}->{$key} += $dmu_sq;
+         $type_npieval_avgerr{ksd}->{$key} += $ksd;
+         $type_npieval_avgerr{efds}->{$key} += $efds;
+         $type_npieval_avgerr{orthtvd}->{$key} += $orthant_tvd;
+         $type_npieval_avgerr{tvd1d}->{$key} += $oned_tvd;
+         $type_npieval_avgerr{tvd1dall}->{$key} += $onedall_tvd;
        
       }
 
@@ -259,10 +253,10 @@ $type_npieval_avgerr{tvd1dall}->{$key} += $onedall_tvd;
       push @onedim1_tvds, $oned_tvd;
       push @onedimall_tvds, $onedall_tvd;
 
-### store acceptance info:    #############
+      ### store acceptance info:    #############
       store_accept_info('accept_info', \%accept_info);
 
-   }  # end of loop over reps
+   }                            # end of loop over reps
 
    my $run_params = `cat run_params`;
 
@@ -274,13 +268,9 @@ $type_npieval_avgerr{tvd1dall}->{$key} += $onedall_tvd;
 
    for (@sgens) {
       printf $fh1 "%8i %10.7g %10.7g %10.7g %10.7g %10.7g %10.7g \n", $_,
-#  $gen_avgdmusq{$_}/$n_reps, $gen_avgksd{$_}/$n_reps, $gen_avgefds{$_}/$n_reps, # cols 2-4
- #         $gen_avgorthtvd{$_}/$n_reps, $gen_avg1dim1tvd{$_}/$n_reps,  $gen_avg1dimalltvd{$_}/$n_reps;
-        $type_npieval_avgerr{dmusq}->{$_}/$n_reps, $type_npieval_avgerr{ksd}->{$_}/$n_reps, $type_npieval_avgerr{efds}->{$_}/$n_reps, 
-# $gen_avgksd{$_}/$n_reps, $gen_avgefds{$_}/$n_reps, # cols 2-4
-#          $gen_avgorthtvd{$_}/$n_reps, $gen_avg1dim1tvd{$_}/$n_reps,  $gen_avg1dimalltvd{$_}/$n_reps;
-$type_npieval_avgerr{orthtvd}->{$_}/$n_reps, $type_npieval_avgerr{tvd1d}->{$_}/$n_reps, $type_npieval_avgerr{tvd1dall}->{$_}/$n_reps
-   }
+        $type_npieval_avgerr{dmusq}->{$_}/$n_reps, $type_npieval_avgerr{ksd}->{$_}/$n_reps, $type_npieval_avgerr{efds}->{$_}/$n_reps,
+          $type_npieval_avgerr{orthtvd}->{$_}/$n_reps, $type_npieval_avgerr{tvd1d}->{$_}/$n_reps, $type_npieval_avgerr{tvd1dall}->{$_}/$n_reps
+       }
    printf $fh1 "\n";
    close $fh1;
 
@@ -293,11 +283,11 @@ $type_npieval_avgerr{orthtvd}->{$_}/$n_reps, $type_npieval_avgerr{tvd1d}->{$_}/$
    for my $T (@sTs) {
       my $acc_rate2 = $accept_info{nacc2}->{$T} / $accept_info{ntry2}->{$T};
       printf $fh2 ("%10.7g %8i %8i %10.7g  ", # %8i %8i %10.7g \n",
-      $T, $accept_info{ntry2}->{$T}, $accept_info{nacc2}->{$T}, $acc_rate2);
+                   $T, $accept_info{ntry2}->{$T}, $accept_info{nacc2}->{$T}, $acc_rate2);
       if (exists $accept_info{nswaptry}->{$T} and $accept_info{nswaptry}->{$T} > 0) {
          my $swap_acc_rate = $accept_info{nswapacc}->{$T} / $accept_info{nswaptry}->{$T};
          printf $fh2 (" %8i %8i %10.7g \n", $accept_info{nswaptry}->{$T}, $accept_info{nswapacc}->{$T}, $swap_acc_rate );
-      }else{
+      } else {
          printf $fh2 "\n";
       }
    }
