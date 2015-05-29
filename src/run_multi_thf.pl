@@ -18,7 +18,7 @@ unlink("avg_accept_info");
 my $n_generations = 100000;
 my $n_burn_in = 0;
 my $n_dimensions = 1;
-my $peaks_string = '-0.5, 0.0125, 0.5; 0.5, 0.0125, 0.5';
+my $peaks_string = '-0.5, 0.015625, 0.5; 0.5, 0.015625, 0.5'; # default sigma = 1/64, peak-peak spacing = 1
 my $n_peaks;
 my $temperatures_string = '1.0';
 my $rates_string = '';
