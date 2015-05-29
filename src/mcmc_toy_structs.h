@@ -147,8 +147,8 @@ Multi_T_chain* construct_multi_T_chain(int n_temperatures, double* temperatures,
 void multi_T_chain_within_T_mcmc_step(Multi_T_chain* multi_T_chain);
 void multi_T_chain_T_swap_mcmc_step(Multi_T_chain* multi_T_chain, int i_c, int i_h);
 void multi_T_chain_output_tvd(Multi_T_chain* multi_T_chain);
-void multi_T_chain_output_within_T_accept_info(Multi_T_chain* multi_T_chain);
-void multi_T_chain_output_swap_info(Multi_T_chain* multi_T_chain);
+void multi_T_chain_output_withinT_accept_info(Multi_T_chain* multi_T_chain);
+void multi_T_chain_output_Tswap_accept_info(Multi_T_chain* multi_T_chain);
 void free_multi_T_chain(Multi_T_chain* chain);
 // Ndim_histogram
 Ndim_histogram* construct_ndim_histogram(int n_dim, const Binning_spec* bins); //(int Ndim, int Ngrid_max);

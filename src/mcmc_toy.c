@@ -20,6 +20,7 @@ gsl_rng* g_rng;
 
 FILE* g_tvd_vs_gen_fstream; 
 FILE* g_run_params_fstream;
+FILE* g_accept_info_fstream;
 
 long g_n_pi_evaluations;
 long g_max_pi_evaluations;
@@ -27,6 +28,7 @@ long g_max_pi_evaluations;
 // main:
 int main(int argc, char* argv[]){
  g_run_params_fstream = fopen("run_params", "w");
+ g_accept_info_fstream = fopen("accept_info", "w");
   // ********** read control parameters from command line: ***************
   fprintf(g_run_params_fstream,"# ");
   for(int i=0; i<argc; i++){
@@ -91,7 +93,6 @@ next_arg--;
   gsl_rng_env_setup();
   const gsl_rng_type* rng_type = gsl_rng_default;
   g_rng = gsl_rng_alloc(rng_type);
-  fprintf(g_run_params_fstream,"# seed: %i \n", seed);
   gsl_rng_set(g_rng, seed);
   // *************** open output files *************
   g_tvd_vs_gen_fstream = fopen("tvd_etc_vs_gen", "w");
@@ -144,8 +145,8 @@ next_arg--;
       if(g_n_pi_evaluations >= g_max_pi_evaluations){ break; }
     }
     multi_T_chain_output_tvd(multi_T_chain);
-    multi_T_chain_output_within_T_accept_info(multi_T_chain);
-    multi_T_chain_output_swap_info(multi_T_chain);
+    multi_T_chain_output_withinT_accept_info(multi_T_chain);
+    if(! neighbor_swap_only){  multi_T_chain_output_Tswap_accept_info(multi_T_chain); }
     free_multi_T_chain(multi_T_chain);
   fflush(stdout);
   free_ndim_histogram(targprobs_ndim);

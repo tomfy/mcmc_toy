@@ -321,21 +321,29 @@ void multi_T_chain_output_tvd(Multi_T_chain* multi_T_chain){
     //  }
     // multi_T_chain->next_summary_generation = (int)(multi_T_chain->summary_generation * SUMMARY_GEN_FACTOR);
 }
-void multi_T_chain_output_within_T_accept_info(Multi_T_chain* multi_T_chain){
+void multi_T_chain_output_withinT_accept_info(Multi_T_chain* multi_T_chain){
   for(int i=0; i<multi_T_chain->n_temperatures; i++){
     Single_T_chain* chain = multi_T_chain->coupled_chains[i];
-    printf("# T: %10.6g  %8i %8i   %8i %8i \n", 
-           chain->temperature, chain->n_try_1, chain->n_accept_1, chain->n_try_2, chain->n_accept_2);
+    fprintf(g_accept_info_fstream, "# T: %10.6g  %8i %8i   %8i %8i ", chain->temperature, chain->n_try_1, chain->n_accept_1, chain->n_try_2, chain->n_accept_2);
+    if (i<multi_T_chain->n_temperatures-1) {
+      int x[2] = {i, i+1};
+      int y[2] = {i+1, i};
+    int* ptries = get_pointer_to_int_element(multi_T_chain->temperature_swap_tries_accepts, x);
+    int* paccepts = get_pointer_to_int_element(multi_T_chain->temperature_swap_tries_accepts, y);
+    fprintf(g_accept_info_fstream, " %8i %8i \n", *ptries, *paccepts); 
+    }else{
+        fprintf(g_accept_info_fstream, "\n");
+    }
   }
 }
-void multi_T_chain_output_swap_info(Multi_T_chain* multi_T_chain){
+void multi_T_chain_output_Tswap_accept_info(Multi_T_chain* multi_T_chain){
   for(int i=0; i<multi_T_chain->n_temperatures; i++){
-    printf("# %12.5f  ", multi_T_chain->coupled_chains[i]->temperature);
+    fprintf(g_accept_info_fstream, "# %12.5f  ", multi_T_chain->coupled_chains[i]->temperature);
     for(int j=0; j<multi_T_chain->n_temperatures; j++){
       int ij[2] = {j, i};
       int* p = get_pointer_to_int_element(multi_T_chain->temperature_swap_tries_accepts, ij);
-      printf("%8i ", *p);
-    }printf("\n");
+      fprintf(g_accept_info_fstream, "%8i ", *p);
+    }fprintf(g_accept_info_fstream, "\n");
   }
 }
 void free_multi_T_chain(Multi_T_chain* chain){

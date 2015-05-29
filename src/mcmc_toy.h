@@ -8,6 +8,7 @@ extern const gsl_rng_type* g_rng_type;
 extern gsl_rng* g_rng;
 extern FILE* g_tvd_vs_gen_fstream; 
 extern FILE* g_run_params_fstream;
+extern FILE* g_accept_info_fstream;
 
 extern long g_n_pi_evaluations;
 extern long g_max_pi_evaluations;
