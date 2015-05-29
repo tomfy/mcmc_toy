@@ -1,0 +1,4 @@
+# ignore object and archive files:
+# .gitignore
+*.[oa]
+*~
