@@ -48,7 +48,7 @@ GetOptions(
            'min_n_temperatures=i' => \$min_n_temperatures,
            'max_n_temperatures=i' => \$max_n_temperatures,
            't_factor=f' => \$t_factor,
-           't_factor_exponent=f' => \$t_factor_exponent, 
+       #    't_factor_exponent=f' => \$t_factor_exponent, 
            'cool_rate=f' => \$cool_rate,
            'neighbor_swap_only=i' => \$neighbor_swap_only,
 	  );
@@ -61,7 +61,7 @@ my %ndim_sig_opt_deltafunction = (1 => 1.000, 2 => 0.8121, 3 => 0.7190, 4 => 0.6
 				  16 => 0.2507, 17 => 0.2429, 18 => 0.2360, 19 => 0.2296, 20 => 0.2237,
 				 );
 
-$t_factor = 2.0**$t_factor_exponent if(defined $t_factor_exponent);
+#$t_factor = 2.0**$t_factor_exponent if(defined $t_factor_exponent);
 my $n_temperatures;
 print "# $min_n_temperatures $max_n_temperatures \n";
 for ($n_temperatures = $min_n_temperatures; $n_temperatures <= $max_n_temperatures; $n_temperatures++) {
