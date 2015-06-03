@@ -36,6 +36,7 @@ my $n_temperatures = 1;
 #my $max_n_temperatures = 5;
 my $cool_rate = 1.0; # rate of within-T moves in all chains but hottest, rel. to hottest.
 my $neighbor_swap_only = 1;
+my $F_sigma_min = 1;
 my $F_sigma_max = 140;
 #my $max_n_temperatures = 8.01;
 GetOptions(
@@ -54,6 +55,7 @@ GetOptions(
            #    'max_n_temperatures=i' => \$max_n_temperatures,
        #    'n_factors=i' => \$n_factors,
            'f_sigma=f' => \$f_sigma,
+           'F_sigma_min=f' => \$F_sigma_min,
            'F_sigma_max=f' => \$F_sigma_max,
         #   'max_t_hot=f' => \$max_t_hot,
            #       't_factor_exponent=f' => \$t_factor_exponent, 
@@ -82,7 +84,7 @@ my %ndim_sig_opt_deltafunction = (1 => 1.000, 2 => 0.8121, 3 => 0.7190, 4 => 0.6
 # }
 #for my $t_factor (@t_factors){ 
 my $Thot = 1.0;
-my $F_sigma = 1.0;
+my $F_sigma = $F_sigma_min;
 while ($F_sigma < $F_sigma_max*$f_sigma) {
    print "# $n_temperatures \n";
    my @peak_strings = split(";", $peaks_string);
