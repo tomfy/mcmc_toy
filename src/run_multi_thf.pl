@@ -36,6 +36,7 @@ my $n_temperatures = 1;
 #my $max_n_temperatures = 5;
 my $cool_rate = 1.0; # rate of within-T moves in all chains but hottest, rel. to hottest.
 my $neighbor_swap_only = 1;
+my $prop_scale_factor = 2.38; # the proposal sigma will be $prop_scale_factor*sigma_target/sqrt(d) ; 2.38 is 'optimal'
 #my $max_n_temperatures = 8.01;
 GetOptions(
 	   'n_dimensions=i' => \$n_dimensions,
@@ -57,7 +58,9 @@ GetOptions(
            #       't_factor_exponent=f' => \$t_factor_exponent, 
            'cool_rate=f' => \$cool_rate,
            'neighbor_swap_only=i' => \$neighbor_swap_only,
+	   'prop_scale_factor=f' => \$prop_scale_factor,
 	  );
+
 
 # 'optimal' (for peak jumping) sigma_prop is A*x(d)  where d is n_dimensions, A is peak spacing;
 # here keys are d; values are x(d). (x(d) is approx 1/sqrt(d) for large d)
@@ -94,7 +97,7 @@ while ($Thot < $max_t_hot*$f_t_hot) {
    # print "# proposals string: $proposals_string \n";
 
    my $prop_sig_1 = $ndim_sig_opt_deltafunction{$n_dimensions}; # 'opt' peak jumping sigma (peak spacing of 1) for T = 1
-   my $prop_sig_2 = 2.38*$target_peak_sigma/sqrt($n_dimensions); # 'opt' within peak sigma for T = 1
+   my $prop_sig_2 = $prop_scale_factor*$target_peak_sigma/sqrt($n_dimensions); # 'opt' within peak sigma for T = 1
    my $prop_p1 = 0.9;
    $temperatures_string =~ s/[,;]/ /g;
    $rates_string =~ s/[,;]/ /g;
