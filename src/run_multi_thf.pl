@@ -30,6 +30,7 @@ my $chain_type = "mcmc";	# or "iid"
 my $n_reps = 8;
 # my $n_factors = 12;
 my $f_t_hot = sqrt(2.0);
+my $min_t_hot = 1.0;
 my $max_t_hot = 10000;
 #my $t_factor_exponent = undef;    # t_factor is 2**t_factor_exponent
 my $n_temperatures = 1;
@@ -54,6 +55,7 @@ GetOptions(
            #    'max_n_temperatures=i' => \$max_n_temperatures,
        #    'n_factors=i' => \$n_factors,
            'f_t_hot=f' => \$f_t_hot,
+           'min_t_hot=f' => \$min_t_hot,
            'max_t_hot=f' => \$max_t_hot,
            #       't_factor_exponent=f' => \$t_factor_exponent, 
            'cool_rate=f' => \$cool_rate,
@@ -82,7 +84,7 @@ my %ndim_sig_opt_deltafunction = (1 => 1.000, 2 => 0.8121, 3 => 0.7190, 4 => 0.6
 #    push @t_factors, $tf;
 # }
 #for my $t_factor (@t_factors){ 
-my $Thot = 1.0;
+my $Thot = $min_t_hot;
 while ($Thot < $max_t_hot*$f_t_hot) {
    print "# $n_temperatures \n";
    my @peak_strings = split(";", $peaks_string);
