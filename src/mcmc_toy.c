@@ -16,6 +16,7 @@ const Ndim_histogram* g_targprobs_1dim;
 const Ndim_histogram* g_targprobs_orthants;
 const Ndim_histogram* g_targprobs_one_orthant;
 
+
 gsl_rng* g_rng;
 
 FILE* g_tvd_vs_gen_fstream; 
@@ -89,6 +90,7 @@ next_arg--;
   int neighbor_swap_only = atoi(argv[next_arg+4]); // 0 -> do all swaps; 1 -> only swap neighboring temperature chains.
   fprintf(g_run_params_fstream, "# seed: %i  chain_type: %s neighbor_swap_only: %i \n", seed, chain_type, neighbor_swap_only);
   // *************** set up RNG *****************
+
 
   gsl_rng_env_setup();
   const gsl_rng_type* rng_type = gsl_rng_default;
@@ -600,3 +602,14 @@ void add_arrays(int size, double* sum_x, const double* x){ // add second array t
 		sum_x[i] += x[i];
 	}
 }
+
+
+double target_expcos(double A, double B, double C, double x){
+  // peak to valley ratio is exp(2*A)
+  // tails go like exp(-abs(C*x))
+  // knee is at x=B
+  // spacing of peaks is 1
+  //  return exp(A*cos(2*M_PI*x) - D*pow((pow(B,C) + pow(x,C)), 1.0/C));
+  return exp(A*cos(2*M_PI*x) - C*sqrt(B*B + x*x) );
+}
+

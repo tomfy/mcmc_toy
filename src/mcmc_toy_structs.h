@@ -2,7 +2,6 @@
 typedef int (*int_func_ptr)(); // don't need argument lists here?
 typedef double (*double_func_ptr)();
 
-
 typedef struct
 { // a Nsize^Ndim array
   int Ndim;

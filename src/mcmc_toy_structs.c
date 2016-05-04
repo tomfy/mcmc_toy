@@ -445,6 +445,7 @@ void free_ndim_array_of_double(Ndim_array_of_double* A){
   free(A);
 }
 
+
 double set_ndim_array_of_double_to_target(Ndim_array_of_double* array_struct,
 					  double outer_value, const Target_1dim* targ_1d, const Binning_spec* bins){
   Target_peak_1dim* peaks = targ_1d->peaks;

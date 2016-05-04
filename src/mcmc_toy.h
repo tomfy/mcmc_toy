@@ -13,6 +13,7 @@ extern FILE* g_accept_info_fstream;
 extern long g_n_pi_evaluations;
 extern long g_max_pi_evaluations;
 
+
 #define M_PI (3.14159265358979323846)
 #define SQRT2PI  (sqrt(2.0*M_PI))
 #define ONEOVERSQRT2PI  (1.0/sqrt(2.0*M_PI))
