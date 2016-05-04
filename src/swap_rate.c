@@ -1,13 +1,9 @@
 #include <stdlib.h>
 #include <math.h>
-// #include <stdio.h>
+#include <stdio.h>
 #include <gsl/gsl_rng.h>
 #include <gsl/gsl_randist.h>
 #include <gsl/gsl_cdf.h>
-
-// double draw_ndim(gsl_rng* rng, int n_dim, double sigma, double* rsq);
-// double avg_swap_Pa(gsl_rng* the_rng, int n_dimensions, double T_hot, long n_reps);
-// double avg_swap_Pa_fast(gsl_rng* the_rng, int n_dimensions, double T_hot, long n_reps);
 
 double draw_ndim_gaussian(gsl_rng* rng, int n_dim, double sigma, double* rsq);
 double avg_swap_Pa_fast_gaussian(gsl_rng* the_rng, int n_dimensions, double T_hot, long n_reps);
@@ -27,22 +23,15 @@ int main(int argc, char* argv[]){
   gsl_rng* the_rng = gsl_rng_alloc(rng_type);
   gsl_rng_set(the_rng, seed);
 
-  //  long n_reps = 1000;
   double desired_swap_rate = 0.234; 
-  int max_n_dim = 256; // 2*1025;
+  int max_n_dim = 1024;
 
 for(int n_dimensions = 1; n_dimensions <= max_n_dim; n_dimensions *= 2)
 {
-
-  //  double T_hot_prev = 0;
-    //    double asr = 1.0;
-    //    double asr_prev = 2.0;
     double Tfactor = pow(2.0,0.05);
     double T23_predicted = 1.0 + 2.95/(pow((double)n_dimensions, 0.53));
-      for(int k=0; k<=32; k++){ // double T_hot = 1; // + 2.9*pow((double)n_dimensions, -0.55); // 0.8 * exp(1.0)/sqrt((double)n_dimensions); 
+      for(int k=0; k<=32; k++){ 
         double T_hot = pow(T23_predicted, 0.1 + k*0.1);
-        //  T_hot < 100; 
-        //  T_hot *= Tfactor){
       double avg_swap_rate_gauss = avg_swap_Pa_fast_gaussian(the_rng, n_dimensions, T_hot, n_reps);
       double avg_swap_rate_exp = avg_swap_Pa_fast_exponential(the_rng, n_dimensions, T_hot, n_reps);
       double delta_beta_sq = pow((1.0 - 1.0/T_hot), 2);
@@ -50,17 +39,12 @@ for(int n_dimensions = 1; n_dimensions <= max_n_dim; n_dimensions *= 2)
       printf("%6d  %8g   ", n_dimensions, T_hot);
       printf("%8g  %8g  %8g    ", avg_swap_rate_gauss, avg_swap_rate_gauss*delta_beta_sq,  avg_swap_rate_gauss*log_Tratio_sq);
       printf("%8g  %8g  %8g\n", avg_swap_rate_exp, avg_swap_rate_exp*delta_beta_sq, avg_swap_rate_exp*log_Tratio_sq);
-      //  T_hot_prev = T_hot;
-      //  asr_prev = asr;
-      
     }
   printf("\n");    
  }
-// printf("\n");
 }
 
 double draw_ndim_gaussian(gsl_rng* rng, int n_dim, double sigma, double* rsq){
-  // double* xs = (double*)malloc(n_dim*sizeof(double));
   double n_dim_density = 1.0;
   double lrsq = 0.0;
   for(int i=0; i<n_dim; i++){
@@ -75,7 +59,6 @@ double draw_ndim_gaussian(gsl_rng* rng, int n_dim, double sigma, double* rsq){
 }
 
 double avg_swap_Pa_fast_gaussian(gsl_rng* the_rng, int n_dimensions, double T_hot, long n_reps){ 
-  // int n_dimensions = 2;
   double sigma_cold = 1.0;
   double sigma_hot = sigma_cold*sqrt(T_hot);
   double var_cold = sigma_cold*sigma_cold;
@@ -98,10 +81,8 @@ double avg_swap_Pa_fast_gaussian(gsl_rng* the_rng, int n_dimensions, double T_ho
       double logPa = xxx*(cold_rsqs[i] - hot_rsqs[j]);
       if(logPa > 0.0){ Pa = 1; }else{ Pa = exp(logPa); }
       Pa_sum += Pa;
-      //  printf("%8g   %8g \n", rsq_cold, density_cold);
     }
   }
-  // printf("Avg Pa: %8g \n", Pa_sum/(double)n_reps);
   free(cold_densities);
   free(hot_densities);
   free(cold_rsqs);
@@ -122,7 +103,6 @@ return n_dim_density;
 }
 
 double avg_swap_Pa_fast_exponential(gsl_rng* the_rng, int n_dimensions, double T_hot, long n_reps){ 
-  // int n_dimensions = 2;
   double T_cold = 1.0;
   double scale_cold = 1.0;
   double scale_hot = scale_cold*T_hot;
@@ -138,7 +118,7 @@ double avg_swap_Pa_fast_exponential(gsl_rng* the_rng, int n_dimensions, double T
     hot_densities[i] =  draw_ndim_exponential(the_rng, n_dimensions, scale_hot, hot_xsums+i); // density_hot;
   }
 
-  double xxx = (1.0/T_cold - 1.0/T_hot); //     -0.5*(1.0/var_hot - 1.0/var_cold);
+  double xxx = (1.0/T_cold - 1.0/T_hot); 
   double Pa_sum = 0.0;
   double Pa;
   for(int i=0; i<n_reps; i++){
