@@ -1,0 +1,6 @@
+swap_rate: swap_rate.o 
+	gcc -std=c99 -O3 -o swap_rate  swap_rate.o -lm -lgsl -lgslcblas
+
+swap_rate.o: swap_rate.c
+	gcc -std=c99 -O3 -c swap_rate.c
+
