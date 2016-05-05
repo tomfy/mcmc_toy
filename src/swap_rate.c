@@ -16,17 +16,22 @@ int main(int argc, char* argv[]){
   if(argc > 1){
   n_reps = atoi(argv[1]);
   }
+ int seed = 1234577;
+  if(argc > 2){
+    seed = atoi(argv[2]);
+  }
 
-  int seed = 1234577;
+ 
   gsl_rng_env_setup();
   const gsl_rng_type* rng_type = gsl_rng_default;
   gsl_rng* the_rng = gsl_rng_alloc(rng_type);
   gsl_rng_set(the_rng, seed);
 
   double desired_swap_rate = 0.234; 
-  int max_n_dim = 1024;
+  int min_n_dim = 1;
+  int max_n_dim = 1;
 
-for(int n_dimensions = 1; n_dimensions <= max_n_dim; n_dimensions *= 2)
+for(int n_dimensions = min_n_dim; n_dimensions <= max_n_dim; n_dimensions *= 2)
 {
     double Tfactor = pow(2.0,0.05);
     double T23_predicted = 1.0 + 2.95/(pow((double)n_dimensions, 0.53));
