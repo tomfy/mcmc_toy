@@ -30,7 +30,7 @@ int main(int argc, char* argv[]){
 
   double desired_swap_rate = 0.234; 
   int min_n_dim = 1;
-  int max_n_dim = 1;
+  int max_n_dim = 1024;
 
 for(int n_dimensions = min_n_dim; n_dimensions <= max_n_dim; n_dimensions *= 2)
 {
