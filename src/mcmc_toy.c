@@ -22,7 +22,7 @@ gsl_rng* g_rng;
 FILE* g_tvd_vs_gen_fstream; 
 FILE* g_run_params_fstream;
 FILE* g_accept_info_fstream;
-
+FILE* g_state_vs_gen_fstream;
 long g_n_pi_evaluations;
 long g_max_pi_evaluations;
 
@@ -30,6 +30,7 @@ long g_max_pi_evaluations;
 int main(int argc, char* argv[]){
  g_run_params_fstream = fopen("run_params", "w");
  g_accept_info_fstream = fopen("accept_info", "w");
+ g_state_vs_gen_fstream = fopen("state_vs_gen", "w");
   // ********** read control parameters from command line: ***************
   fprintf(g_run_params_fstream,"# ");
   for(int i=0; i<argc; i++){
@@ -121,7 +122,7 @@ next_arg--;
   
     State** states = (State**)malloc(n_temperatures*sizeof(State*));
     for(int i=0; i<n_temperatures; i++){
-      states[i] = construct_state(n_dimensions, targ_1d, temperatures[i]);
+      states[i] = construct_state(n_dimensions, targ_1d, i, temperatures);
     }
     Multi_T_chain* multi_T_chain = construct_multi_T_chain(n_temperatures, temperatures, rates, proposals, states, &the_bin_set, chain_type);
     g_n_pi_evaluations = 0;
@@ -133,17 +134,30 @@ next_arg--;
 
     int n_tswap_every = 1;
     // ********** do post-burn-in *********
-    for(int n=1; n<=mcmc_steps; n++){   
+    for(int n=1; n<=mcmc_steps; n++){  
+      if((n % 10) == 0){ 
+ multi_T_chain_print_state(multi_T_chain);
+ fprintf(g_state_vs_gen_fstream, "\n");
+      }
       // take an mcmc step
       multi_T_chain_within_T_mcmc_step(multi_T_chain);  
       if(n % n_tswap_every == 0){
+        if(1){
         for(int i=0; i<n_temperatures-1; i++){
           for(int j=i+1; j<n_temperatures; j++){
             multi_T_chain_T_swap_mcmc_step(multi_T_chain, i, j);
             if(neighbor_swap_only){ break; }
           }
         } 
+        }else{ // do some number of T-swaps between randomly chosen pairs of levels. 
+          for(int i=0; i< (int)(n_temperatures*(n_temperatures-1)/2); i++){
+            int i,j;
+            rand_pair(n_temperatures, &i, &j);
+            multi_T_chain_T_swap_mcmc_step(multi_T_chain, i, j);
+          }
+        }
       }
+     
       if(g_n_pi_evaluations >= g_max_pi_evaluations){ break; }
     }
     multi_T_chain_output_tvd(multi_T_chain);
@@ -369,15 +383,15 @@ double total_variation_distance(const Ndim_histogram* targprobs, const Ndim_hist
   return tvd;
 }
 
-void print_array_of_int(int Nsize, int* array){
+void print_array_of_int(FILE* fstream, int Nsize, int* array){
   for(int i=0; i<Nsize; i++){
-    printf("%6i ", array[i]);
+    fprintf(fstream, "%6i ", array[i]);
   }// printf("\n");
 }
 
-void print_array_of_double(int Nsize, double* array){
+void print_array_of_double(FILE* fstream, int Nsize, double* array){
   for(int i=0; i<Nsize; i++){
-    printf("%11.8g ", array[i]);
+    fprintf(fstream, "%8.5g ", array[i]);
   }
 }
 
@@ -613,3 +627,12 @@ double target_expcos(double A, double B, double C, double x){
   return exp(A*cos(2*M_PI*x) - C*sqrt(B*B + x*x) );
 }
 
+void rand_pair(int N, int* i, int* j){
+  *i = (int)((N-1)*drand()); // in range [0,N-1]
+  *j = (int)((N-2)*drand()); // in range [0,N-2]
+  if(*j == *i){
+    *j = N-1; // now *i and *j are both in range [0,N-1] and they are not equal.
+  }
+}
+
+                                 

@@ -12,12 +12,15 @@
 // these are the functions that go with the structs in structs.h
 
 // construct a state
-State* construct_state(int n_dimensions, const Target_1dim* targ_1d, double temperature){ 
+State* construct_state(int n_dimensions, const Target_1dim* targ_1d, int t_index, double* temperatures){ 
   State* the_state = (State*)calloc(1, sizeof(State));
   the_state->n_dimensions = n_dimensions;
+  the_state->walker_index = t_index; // initially walker_index is = t_index
+  the_state->most_recent_end = -1; // 
+  the_state->hottest_since_cold = t_index; // index of hottest since being cold 
   the_state->point = (double*)calloc(n_dimensions, sizeof(double));
   for(int i=0; i<n_dimensions; i++){
-    the_state->point = draw_ndim(n_dimensions, targ_1d, temperature); // draw from target distribution
+    the_state->point = draw_ndim(n_dimensions, targ_1d, temperatures[t_index]); // draw from target distribution
   }
   the_state->prob = (USELOGPROB)? -1.0 : f_ndim(targ_1d, n_dimensions, the_state->point);
   the_state->log_prob = (USELOGPROB)? log_f_ndim(targ_1d, n_dimensions, the_state->point) : 0.0;
@@ -217,6 +220,14 @@ void single_T_chain_output_tvd(Single_T_chain* chain){
   chain->next_block_gees = (double*)calloc(next_n_next_block_gees, sizeof(double));
 }
 
+void single_T_chain_output_state(Single_T_chain* chain){
+  
+  fprintf(g_state_vs_gen_fstream, "%2i %2i %2i  ", chain->current_state->walker_index, chain->current_state->most_recent_end, chain->current_state->hottest_since_cold);
+  print_array_of_double(g_state_vs_gen_fstream, 
+                        chain->current_state->n_dimensions, chain->current_state->point);
+  // fprintf(g_state_vs_gen_fstream, "\n");
+}
+
 void free_single_T_chain(Single_T_chain* chain){
   free_state(chain->current_state);
   free_ndim_histogram(chain->mcmc_out_hist);
@@ -230,9 +241,11 @@ Multi_T_chain* construct_multi_T_chain(int n_temperatures, double* temperatures,
   multi_T_chain->generation = 0;
   multi_T_chain->count_within_T_updates = 0;
   multi_T_chain->coupled_chains = (Single_T_chain**)calloc(n_temperatures, sizeof(Single_T_chain*));
+  multi_T_chain->walker_index_to_T_index = (int*)malloc(n_temperatures*sizeof(int));
   multi_T_chain->temperature_swap_tries_accepts = construct_ndim_array_of_int(2, multi_T_chain->n_temperatures, 0);
   for(int i=0; i<n_temperatures; i++){
     multi_T_chain->coupled_chains[i] = construct_single_T_chain(i, temperatures[i], rates[i], proposals[i], states[i], bins, type);
+    multi_T_chain->walker_index_to_T_index[i] = i;
   }
   return multi_T_chain;
 }
@@ -265,7 +278,7 @@ void multi_T_chain_within_T_mcmc_step(Multi_T_chain* multi_T_chain){
     if(OUTPUT_SAMPLES){
       Single_T_chain* chain = multi_T_chain->coupled_chains[i];
       printf("%6i  %11.8f %11.8g ", chain->generation, chain->temperature, chain->current_state->prob); 
-      print_array_of_double(n_dim, chain->current_state->point); printf(" ");
+      print_array_of_double(stdout, n_dim, chain->current_state->point); printf(" ");
       printf("\n");
     }  
   }
@@ -281,6 +294,8 @@ void multi_T_chain_T_swap_mcmc_step(Multi_T_chain* multi_T_chain, int i_c, int i
   assert(i_c < i_h);
   Single_T_chain* cold = multi_T_chain->coupled_chains[i_c];
   Single_T_chain* hot = multi_T_chain->coupled_chains[i_h];
+  int cold_walker_index = cold->current_state->walker_index;
+  int hot_walker_index = hot->current_state->walker_index;
   double T_c = cold->temperature;
   double T_h = hot->temperature;
   double pr_c =  cold->current_state->prob;
@@ -300,7 +315,20 @@ void multi_T_chain_T_swap_mcmc_step(Multi_T_chain* multi_T_chain, int i_c, int i
     hot->current_state = swap_state;
  int* phc = get_pointer_to_int_element(multi_T_chain->temperature_swap_tries_accepts, ihc);
  (*phc)++;
-  }
+ multi_T_chain->walker_index_to_T_index[cold_walker_index] = i_h;
+ multi_T_chain->walker_index_to_T_index[hot_walker_index] = i_c;
+ if(i_h == multi_T_chain->n_temperatures-1){
+   hot->current_state->most_recent_end = 1;
+ }
+if(i_c == 0){
+   cold->current_state->most_recent_end = 0;
+   cold->current_state->hottest_since_cold = 0; 
+ }
+ if(i_h > hot->current_state->hottest_since_cold){
+   hot->current_state->hottest_since_cold = i_h; // this walker has a new hottest temperature is
+   // has experienced since being cold.
+ }
+    } // end of accept 
 }
 
 void multi_T_chain_output_tvd(Multi_T_chain* multi_T_chain){
@@ -345,6 +373,13 @@ void multi_T_chain_output_Tswap_accept_info(Multi_T_chain* multi_T_chain){
       fprintf(g_accept_info_fstream, "%8i ", *p);
     }fprintf(g_accept_info_fstream, "\n");
   }
+}
+
+void multi_T_chain_print_state(Multi_T_chain* multi_T_chain){
+  fprintf(g_state_vs_gen_fstream, "%6d  ", multi_T_chain->generation);
+  for(int i = 0; i < multi_T_chain->n_temperatures; i++){
+    single_T_chain_output_state(multi_T_chain->coupled_chains[i]);
+  } 
 }
 void free_multi_T_chain(Multi_T_chain* chain){
   for(int i = 0; i<chain->n_temperatures; i++){

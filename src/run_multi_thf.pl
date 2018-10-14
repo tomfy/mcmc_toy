@@ -18,9 +18,9 @@ unlink("avg_accept_info");
 my $n_generations = 100000;
 my $n_burn_in = 0;
 my $n_dimensions = 1;
-my $peaks_string = '-0.5, 0.015625, 0.5; 0.5, 0.015625, 0.5'; # default sigma = 1/64, peak-peak spacing = 1
+my $peaks_string = '0.5,0.05,1.0; 1.5,0.05,0.5; 2.5,0.05,0.25; 3.5,0.05,0.125'; # default sigma = 1/64, peak-peak spacing = 1
 my $n_peaks;
-my $temperatures_string = '1.0';
+my $temperatures_string = ''; # e.g. '1.0,2.0,5.0';
 my $rates_string = '';
 my $proposals_string = ''; # 'gaussian, 1.0, 1.4, 1.0'; # if multiple proposals, separate with ; e.g. 'gaussian 0.07 1.5 0.9; gaussian ... '
 #my %n_bins_hash = (1 => 4096, 2 => 64, 3 => 16, 4 => 8);
@@ -29,7 +29,7 @@ my $n_bins_1d = 360;
 my $chain_type = "mcmc";	# or "iid"
 my $n_reps = 8;
 # my $n_factors = 12;
-my $f_t_hot = sqrt(2.0);
+my $f_t_hot = sqrt(2.0); # geometric temperature spacing factor.
 my $min_t_hot = 1.0;
 my $max_t_hot = 10000;
 #my $t_factor_exponent = undef;    # t_factor is 2**t_factor_exponent
@@ -38,6 +38,7 @@ my $n_temperatures = 1;
 my $cool_rate = 1.0; # rate of within-T moves in all chains but hottest, rel. to hottest.
 my $neighbor_swap_only = 1;
 my $prop_scale_factor = 2.38; # the proposal sigma will be $prop_scale_factor*sigma_target/sqrt(d) ; 2.38 is 'optimal'
+my $seed = 1234567;
 #my $max_n_temperatures = 8.01;
 GetOptions(
 	   'n_dimensions=i' => \$n_dimensions,
@@ -61,13 +62,14 @@ GetOptions(
            'cool_rate=f' => \$cool_rate,
            'neighbor_swap_only=i' => \$neighbor_swap_only,
 	   'prop_scale_factor=f' => \$prop_scale_factor,
-	  );
+           'seed=i' => \$seed,
+);
 
 
 # 'optimal' (for peak jumping) sigma_prop is A*x(d)  where d is n_dimensions, A is peak spacing;
 # here keys are d; values are x(d). (x(d) is approx 1/sqrt(d) for large d)
 my %ndim_sig_opt_deltafunction = (1 => 1.000, 2 => 0.8121, 3 => 0.7190, 4 => 0.6541, 5 => 0.5995,
-				  6 => 5454, 7 => 0.4811, 8 => 0.4075, 9 => 0.3597, 10 => 0.0.3303,
+				  6 => 0.5454, 7 => 0.4811, 8 => 0.4075, 9 => 0.3597, 10 => 0.0.3303,
 				  11 => 0.3095, 12 => 0.2934, 13 => 0.2802, 14 => 0.2690, 15 => 0.2593,
 				  16 => 0.2507, 17 => 0.2429, 18 => 0.2360, 19 => 0.2296, 20 => 0.2237,
 				 );
@@ -87,6 +89,7 @@ my %ndim_sig_opt_deltafunction = (1 => 1.000, 2 => 0.8121, 3 => 0.7190, 4 => 0.6
 my $Thot = $min_t_hot;
 while ($Thot < $max_t_hot*$f_t_hot) {
    print "# $n_temperatures \n";
+print "$Thot  $max_t_hot  $f_t_hot \n";
    my @peak_strings = split(";", $peaks_string);
    $n_peaks = scalar @peak_strings;
    for (@peak_strings) {
@@ -104,13 +107,19 @@ while ($Thot < $max_t_hot*$f_t_hot) {
    $temperatures_string =~ s/[,;]/ /g;
    $rates_string =~ s/[,;]/ /g;
    #print "n temperatures: $n_temperatures \n";
-   my @temperatures = ((1.0) x ($n_temperatures));
+   my @temperatures;
+   if($temperatures_string){
+@temperatures = split(" ", $temperatures_string);
+$n_temperatures = scalar @temperatures;
+   }else{
+ @temperatures = ((1.0) x ($n_temperatures));
    if ($n_temperatures > 1) {
       while (my ($i, $T) = each @temperatures) { # set up geometric sequence of T's 
          $temperatures[$i] = $Thot**($i/($n_temperatures-1));
       }
    }
-   print "temperatures: ", join(", ", @temperatures), "\n";
+}
+   print "temperatures: ", join(", ", @temperatures), "\n"; # exit;
    my @rates = ();
    if ($rates_string) {
       @rates = split(" ", $rates_string);
@@ -211,9 +220,9 @@ sub trials{                  # do multiple runs with same parameters,
 
    ### 
    #  do the replicate runs ...
-
+#   my $seed = 12367443; # // int(rand(1000000)); # get seed for mcmc_toy rng
    for (1..$n_reps) {
-      my $seed = int(rand(1000000)); # get seed for mcmc_toy rng
+   #   my $seed = 1234567; # // int(rand(1000000)); # get seed for mcmc_toy rng
       system "~/mcmc_toy/src/mcmc_toy  $the_arg_string  $seed  'mcmc' $neighbor_swap_only >  mcmc_toy_samples_tmp";
 
       ###
@@ -260,7 +269,7 @@ sub trials{                  # do multiple runs with same parameters,
 
       ### store acceptance info:    #############
       store_accept_info('accept_info', \%accept_info);
-
+$seed += 2345;
    }                            # end of loop over reps
 
    my $run_params = `cat run_params`;
@@ -315,7 +324,8 @@ sub trials{                  # do multiple runs with same parameters,
    printf("%10.6g +- %8.4g  ", mean(@onedim1_tvds), stddev(@onedim1_tvds)/sqrt(scalar @onedim1_tvds));
    printf("%10.6g +- %8.4g  ", mean(@onedimall_tvds), stddev(@onedimall_tvds)/sqrt(scalar @onedimall_tvds));
    printf("   ");
-   printf("%10.6g +- %8.4g  ", mean(@ms_dmus), stddev(@ms_dmus)/sqrt(scalar @ms_dmus));
+ #  printf("mean squared dmu:  %10.6g +- %8.4g  ", mean(@ms_dmus), stddev(@ms_dmus)/sqrt(scalar @ms_dmus));
+ printf("%10.6g +- %8.4g  ", mean(@ms_dmus), stddev(@ms_dmus)/sqrt(scalar @ms_dmus));
    printf("%10.6g +- %8.4g  ", mean(@ksds), stddev(@ksds)/sqrt(scalar @ksds));
    printf("%10.6g +- %8.4g  ", mean(@efdss), stddev(@efdss)/sqrt(scalar @efdss));
    printf("%10.6g +- %8.4g  ", mean(@sq_of_mean_qs), stddev(@sq_of_mean_qs)/sqrt(scalar @sq_of_mean_qs));

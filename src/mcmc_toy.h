@@ -9,6 +9,7 @@ extern gsl_rng* g_rng;
 extern FILE* g_tvd_vs_gen_fstream; 
 extern FILE* g_run_params_fstream;
 extern FILE* g_accept_info_fstream;
+extern FILE* g_state_vs_gen_fstream; 
 
 extern long g_n_pi_evaluations;
 extern long g_max_pi_evaluations;
@@ -31,8 +32,8 @@ int propose_1dim(int i, int Width, int Ngrid_max);
 double* propose(int n_dim, double* x_array, Proposal* prop, int* which_prop);
 double drand(void);
 
-void print_array_of_int(int Nsize, int* array);
-void print_array_of_double(int Nsize, double* array);
+void print_array_of_int(FILE* fstream, int Nsize, int* array);
+void print_array_of_double(FILE* fstream, int Nsize, double* array);
 
 Ndim_histogram* init_target_distribution(int Ndim, int Ngrid_max, int normalize, const Binning_spec* bins);
 double f_1dim (const Target_1dim* targ_1d, double x);

@@ -63,6 +63,9 @@ typedef struct
   double* point; //
   double prob; // 
   double log_prob; // natural log of the prob density.
+  int walker_index; // 0 for initially cold state, etc.
+  int most_recent_end; // 0 for cold, 1 for hot, for Katzgraber et al type analysis
+  int hottest_since_cold; // the index of the hottest state the walker has been in since being cold.
 } State;
 
 typedef struct
@@ -119,6 +122,7 @@ typedef struct
   int summary_generation; // tvd, ksd have been done up through this generation
   int next_summary_generation; // tvd, ksd will next be done after this generation
   int count_within_T_updates; 
+  int* walker_index_to_T_index; // walker_index_to_T_index[i] gives the T-index of the ith walker; initially it's i.
   Ndim_array_of_int* temperature_swap_tries_accepts;
 } Multi_T_chain;
 
@@ -132,7 +136,7 @@ typedef struct
 
 // State
 //State* construct_state(int n_dimensions); //, Target_distribution* targp);
-State* construct_state(int n_dimensions, const Target_1dim* targ_1d, double temperature); 
+State* construct_state(int n_dimensions, const Target_1dim* targ_1d, int t_index, double* temperatures); 
 void free_state(State* s);
 
 // Single_T_chain
@@ -140,6 +144,7 @@ Single_T_chain* construct_single_T_chain(int chain_number, double T, double rate
 State* single_T_chain_mcmc_step(Single_T_chain* chain);
 void single_T_chain_histogram_current_state(Single_T_chain* chain);
 void single_T_chain_output_tvd(Single_T_chain* chain);
+void single_T_chain_output_state(Single_T_chain* chain);
 void free_single_T_chain(Single_T_chain* chain);
 // Multi_T_chain
 Multi_T_chain* construct_multi_T_chain(int n_temperatures, double* temperatures, double* rates, Proposal* proposals, State** states, const Binning_spec_set* bins, const char* type);
@@ -148,6 +153,7 @@ void multi_T_chain_T_swap_mcmc_step(Multi_T_chain* multi_T_chain, int i_c, int i
 void multi_T_chain_output_tvd(Multi_T_chain* multi_T_chain);
 void multi_T_chain_output_withinT_accept_info(Multi_T_chain* multi_T_chain);
 void multi_T_chain_output_Tswap_accept_info(Multi_T_chain* multi_T_chain);
+void multi_T_chain_print_state(Multi_T_chain* multi_T_chain);
 void free_multi_T_chain(Multi_T_chain* chain);
 // Ndim_histogram
 Ndim_histogram* construct_ndim_histogram(int n_dim, const Binning_spec* bins); //(int Ndim, int Ngrid_max);
