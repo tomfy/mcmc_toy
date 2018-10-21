@@ -58,4 +58,5 @@ $order = "cold only";
 $command .= "$order ";
 $command .= "$kernel_scale ";
 
+print "#  $command \n";
 system "$command";

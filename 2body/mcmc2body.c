@@ -70,22 +70,17 @@ int main(int argc, char* argv[]){
 
 
   //*********  Set up target distribution *******************
-  //  int n_peaks = 2;
-  //  double A = 1.0; // spacing parameter; peaks are at x[0] = +-A, other coordinates all zero.
-  //  double peak_width = 0.2; // width parameter; stddev if peak is Normal.
-  //  double height_ratio = 0.25; // height of peak i+1 rel to peak i.
-
   peaks* the_peaks = set_up_peaks(n_dims, n_peaks, 0.5*peak_separation, peak_width, height_ratio, shape_param);
 
 
   // ***** Setup initial states of walkers *********
   double init_width = 2.0*peak_width;
-  chain_state* the_chain_state = set_up_chain_state(n_dims, n_Ts, the_peaks, init_width);
+  chain_state* the_chain_state = set_up_chain_state(n_dims, n_Ts, the_peaks, init_width, inverse_Temperatures);
 
   // ******************************************
   // ***** Loop through n_updates updates *****
   for(int i = 0; i <= n_updates; i++){ // loop through updates
-    if(1){
+    if(0){
       for(int j = 0; j < 2*n_Ts; j++){ // update positions of walkers
         update_x(the_peaks, the_chain_state, inverse_Temperatures[the_chain_state->w_ts[j]], prop_w, j); 
       }

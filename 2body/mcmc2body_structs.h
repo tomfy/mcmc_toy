@@ -27,6 +27,7 @@ typedef struct{
   int* w_LRs;
   int* t_Lws;
   int* t_Rws;
+  double* t_PIs;
 
   int* w_near_peak; // index of nearest peak
   int* w_transition_counts; // counts each walkers moves from one peak to the other.
@@ -40,7 +41,7 @@ typedef struct{
 peaks* set_up_peaks(int n_dims, int n_peaks, double spacing, double width, double height_ratio, double shape_param);
 
 //  chain_state  function declarations
-chain_state* set_up_chain_state(int n_dims, int n_Ts, peaks* the_peaks, double init_width);
+chain_state* set_up_chain_state(int n_dims, int n_Ts, peaks* the_peaks, double init_width, double* inverse_Temperatures);
 int check_state_consistency(chain_state* state);
 void print_states_walker_order(chain_state* state); 
 void print_states_T_order(chain_state* state);
