@@ -33,7 +33,11 @@ typedef struct{
   int* w_transition_counts; // counts each walkers moves from one peak to the other.
   int* w_accepts; // counts the accepted X-changing moves for each walker
   int* t_accepts; // count the accepted X-changing moves for each T-level
+  int* t_Laccepts;
+  int* t_Raccepts;
   int* t_Tswap_accepts; // counts accepted T-swaps between T-levels i, i+1
+int* t_Tswap_Laccepts;
+int* t_Tswap_Raccepts;
 }chain_state;
 
 // function declarations:

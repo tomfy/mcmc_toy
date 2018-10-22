@@ -55,9 +55,13 @@ chain_state* set_up_chain_state(int n_dims, int n_Ts, peaks* the_peaks, double i
   the_chain_state->w_near_peak = (int*)malloc(n_walkers*sizeof(int)); 
   the_chain_state->w_transition_counts = (int*)malloc(n_walkers*sizeof(int));
 
-  the_chain_state->w_accepts = (int*)malloc(n_walkers*sizeof(int)); 
-  the_chain_state->t_accepts = (int*)malloc(n_Ts*sizeof(int)); 
-  the_chain_state->t_Tswap_accepts = (int*)malloc(n_Ts*sizeof(int));
+  the_chain_state->w_accepts = (int*)calloc(n_walkers, sizeof(int)); 
+  the_chain_state->t_accepts = (int*)calloc(n_Ts, sizeof(int)); 
+  the_chain_state->t_Laccepts = (int*)calloc(n_Ts, sizeof(int)); 
+  the_chain_state->t_Raccepts = (int*)calloc(n_Ts, sizeof(int)); 
+  the_chain_state->t_Tswap_accepts = (int*)calloc(n_Ts, sizeof(int));
+  the_chain_state->t_Tswap_Laccepts = (int*)calloc(n_Ts, sizeof(int));
+  the_chain_state->t_Tswap_Raccepts = (int*)calloc(n_Ts, sizeof(int));
   for(int i=0; i < n_walkers; i++){
     double* pt = (double*)malloc(n_dims*sizeof(double));
     for(int j=0; j < n_dims; j++){
@@ -83,9 +87,6 @@ chain_state* set_up_chain_state(int n_dims, int n_Ts, peaks* the_peaks, double i
     
   } // end loop through walkers
   for(int it = 0; it < n_Ts; it++){
-    // double Dsquared(int n_dims, double* x, double* y);
-    // double Kernel(double Dsq, double Lsq);
-    // PI(double pix, double piy, int it, int n_Ts, double K, double Tinverse);
     int iwx = the_chain_state->t_Lws[it];
     int iwy = the_chain_state->t_Rws[it];
     double* x = the_chain_state->w_xs[iwx];
@@ -94,8 +95,6 @@ chain_state* set_up_chain_state(int n_dims, int n_Ts, peaks* the_peaks, double i
     double piy = the_chain_state->w_pis[iwy];
     double Tinverse = inverse_Temperatures[it];
     the_chain_state->t_PIs[it] = PI(pix, piy, it, n_Ts, Kernel(Dsquared(n_dims, x, y), Lsq), Tinverse);
-    the_chain_state->t_accepts[it] = 0;
-    the_chain_state->t_Tswap_accepts[it] = 0;
   }
   return the_chain_state;
 }
@@ -117,14 +116,14 @@ void print_states_T_order(chain_state* state){
     int iw = state->t_Lws[it];
     printf("%2i %2i %3i  ", iw, it, state->w_transition_counts[iw]);
     for(int j=0; j < state->n_dims; j++){
-      printf("%5.3f ", state->w_xs[iw][j]);
+      printf("%7.5f ", state->w_xs[iw][j]);
     }printf("   ");    
   } 
   for(int it=0; it < state->n_Ts; it++){
     int iw = state->t_Rws[it];
     printf("%2i %2i %3i  ", iw, it, state->w_transition_counts[iw]);
     for(int j=0; j < state->n_dims; j++){
-      printf("%5.3f ", state->w_xs[iw][j]);
+      printf("%7.5f ", state->w_xs[iw][j]);
     }printf("   ");    
   } 
 }
@@ -272,15 +271,13 @@ void update_x_2b(peaks* the_peaks, chain_state* state, double Tinverse, double p
   double pi_y = state->w_pis[iw_y];
 
   // update x
-  double* propx = (double*)malloc(state->n_dims*sizeof(double));
-  prop_w /= sqrt(Tinverse + 1e-4);
-  
+  double* propx = (double*)malloc(state->n_dims*sizeof(double));  
   for(int i = 0; i < state->n_dims; i++){ // propose a new position 
     propx[i] = state->w_xs[iw_x][i] + gsl_ran_gaussian(g_rng, prop_w); // normal (aka gaussian) proposal
   }
   double pi_propx = pi(the_peaks, propx);
 
-  double PI_x_y = state->t_PIs[it]; //  PI(pi_x, pi_y, it, state->n_Ts, Kernel(Dsquared(state->n_dims, state->w_xs[iw_x], state->w_xs[iw_y]), Lsq), Tinverse);
+  double PI_x_y = state->t_PIs[it];
   double PI_propx_y = PI(pi_propx, pi_y, it, state->n_Ts, Kernel(Dsquared(state->n_dims, propx, state->w_xs[iw_y]), Lsq), Tinverse); 
   if( (PI_propx_y > PI_x_y)  ||  (gsl_rng_uniform(g_rng)*PI_x_y  <  PI_propx_y) ){ // Accept proposal
 
@@ -288,10 +285,12 @@ void update_x_2b(peaks* the_peaks, chain_state* state, double Tinverse, double p
     free(state->w_xs[iw_x]);  
     state->w_xs[iw_x] = propx;
     state->w_accepts[iw_x]++;
-    state->t_accepts[state->w_ts[iw_x]]++; // can't we just use it?
+    //    assert(it == state->w_ts[iw_x]);
+    state->t_accepts[it]++; // can't we just use it?
+    state->t_Laccepts[it]++;
     state->t_PIs[it] = PI_propx_y;
     int new_near_peak = (propx[0] < 0)? -1 : 1;
-    if ((state->w_ts[iw_x] == 0 /* cold*/ ) && (state->w_near_peak[iw_x] != new_near_peak)){
+    if ( ( it == 0 /* cold*/ ) && (state->w_near_peak[iw_x] != new_near_peak)){
       state->w_transition_counts[iw_x]++;
       state->w_near_peak[iw_x] = new_near_peak;
       pi_x = pi_propx;
@@ -307,7 +306,7 @@ void update_x_2b(peaks* the_peaks, chain_state* state, double Tinverse, double p
   }
   double pi_propy = pi(the_peaks, propy);
 
-  PI_x_y = state->t_PIs[it]; // PI(pi_x, pi_y, it, state->n_Ts, Kernel(Dsquared(state->n_dims, state->w_xs[iw_x], state->w_xs[iw_y]), Lsq), Tinverse);
+  PI_x_y = state->t_PIs[it];
   double PI_x_propy = PI(pi_x, pi_propy, it, state->n_Ts, Kernel(Dsquared(state->n_dims, state->w_xs[iw_x], propy), Lsq), Tinverse); 
   if( (PI_x_propy > PI_x_y)  ||  (gsl_rng_uniform(g_rng)*PI_x_y <  PI_x_propy) ){ // Accept proposal
 
@@ -315,10 +314,11 @@ void update_x_2b(peaks* the_peaks, chain_state* state, double Tinverse, double p
     free(state->w_xs[iw_y]);  
     state->w_xs[iw_y] = propy;
     state->w_accepts[iw_y]++;
-    state->t_accepts[state->w_ts[iw_y]]++;
+    state->t_accepts[it]++;
+    state->t_Raccepts[it]++;
     state->t_PIs[it] = PI_x_propy;
     int new_near_peak = (propy[0] < 0)? -1 : 1;
-    if ((state->w_ts[iw_y] == 0 /* cold*/ ) && (state->w_near_peak[iw_y] != new_near_peak)){
+    if ( ( it == 0 /* cold*/ ) && (state->w_near_peak[iw_y] != new_near_peak)){
       state->w_transition_counts[iw_y]++;
       state->w_near_peak[iw_y] = new_near_peak;
     }
@@ -368,6 +368,7 @@ void T_swap_2b(chain_state* state, double* inverse_Temperatures){
         state->w_ts[iw_xhot] = state->w_ts[iw_xcold];
         state->w_ts[iw_xcold] = tmp;
         state->t_Tswap_accepts[i-1]++; // indices used are 0 through n_Ts-2
+        state->t_Tswap_Laccepts[i-1]++;
         state->t_PIs[i-1] = PI_prop_cold;
         state->t_PIs[i] = PI_prop_hot;
       }
@@ -408,6 +409,7 @@ void T_swap_2b(chain_state* state, double* inverse_Temperatures){
         state->w_ts[iw_yhot] = state->w_ts[iw_ycold];
         state->w_ts[iw_ycold] = tmp;
         state->t_Tswap_accepts[i-1]++; // indices used are 0 through n_Ts-2
+        state->t_Tswap_Raccepts[i-1]++;
         state->t_PIs[i-1] = PI_prop_cold;
         state->t_PIs[i] = PI_prop_hot;
       }
@@ -422,7 +424,7 @@ double Dsquared(int n_dims, double* x, double* y){
   for(int i = 0; i < n_dims; i++){
     dsq += (x[i] - y[i])*(x[i] - y[i]);
   }
-  return dsq; // pow(dsq, 0.5);
+  return dsq;
 }
 
 double Kernel(double Dsq, double Lsq){ // convolution kernel
@@ -431,6 +433,7 @@ double Kernel(double Dsq, double Lsq){ // convolution kernel
 }
 
 double PI(double pix, double piy, int it, int n_Ts, double K, double Tinverse){
+  //  return pow(pix*piy, Tinverse);
   if(it == 0){
     return pix*K;
   }else{
@@ -446,3 +449,8 @@ double PI(double pix, double piy, int it, int n_Ts, double K, double Tinverse){
 }
     
 // the end
+
+
+
+
+

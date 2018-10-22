@@ -110,18 +110,24 @@ int main(int argc, char* argv[]){
   for(int iw = 0; iw < 2*n_Ts; iw++){
     printf("  %2i %5.3f", iw, the_chain_state->w_accepts[iw]/(1.0*n_updates));
   }printf("\n");
-  printf("# X-move acceptance rates:");
+  printf("# X-move acceptance rates:\n");
   for(int it = 0; it < n_Ts; it++){
-    printf("  T-level: %1i P_A: %5.3f", it, the_chain_state->t_accepts[it]/(2.0*n_updates)); 
-  }printf("\n");
-  printf("# T-swap acceptance rates:");
+    printf("#   T-level: %1i P_A: L, R, avg: %5.3f %5.3f %5.3f \n", it,          
+           the_chain_state->t_Laccepts[it]/(1.0*n_updates),
+           the_chain_state->t_Raccepts[it]/(1.0*n_updates),
+           the_chain_state->t_accepts[it]/(2.0*n_updates)
+           ); 
+  } //printf("\n");
+  printf("# T-swap acceptance rates:\n");
   for(int it = 0; it < n_Ts-1; it++){
-    printf("  levels: %1i-%1i P_A: %5.3f", it, it+1, the_chain_state->t_Tswap_accepts[it]/(2.0*n_updates)); 
-  }printf("\n");
+    printf("#   T-levels: %1i-%1i P_A L,R,avg: %5.3f %5.3f %5.3f \n", it, it+1, 
+           the_chain_state->t_Tswap_Laccepts[it]/(1.0*n_updates),
+           the_chain_state->t_Tswap_Raccepts[it]/(1.0*n_updates),
+           the_chain_state->t_Tswap_accepts[it]/(2.0*n_updates)); 
+  } // printf("\n");
 }
 
 // end of main
-
 
 // ***** functions *****
 
