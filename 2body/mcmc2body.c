@@ -105,7 +105,7 @@ int main(int argc, char* argv[]){
       }else if(strcmp(output_order, "walker") == 0){
         print_states_walker_order(the_chain_state);
       }else{
-        print_states_cold_only(the_chain_state);
+        print_states_L0_Rtop_only(the_chain_state);
       }
       printf("\n");
     }

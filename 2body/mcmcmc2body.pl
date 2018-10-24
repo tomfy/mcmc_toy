@@ -59,7 +59,7 @@ my $order = "T";
 if($output_order =~ /walker/){
 $order = "walker";
 }elsif($output_order =~ /cold/){
-$order = "cold only";
+$order = "cold";
 }
 $command .= "$order ";
 $command .= "$kernel_scale ";

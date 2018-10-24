@@ -55,6 +55,7 @@ int check_state_consistency(chain_state* state, double* inverse_Temperatures);
 void print_states_walker_order(chain_state* state); 
 void print_states_T_order(chain_state* state);
 void print_states_cold_only(chain_state* state);
+void print_states_L0_Rtop_only(chain_state* state); // print L level 0, R level n_Ts-1
 
 double pi(peaks* the_peaks, double* x);
 

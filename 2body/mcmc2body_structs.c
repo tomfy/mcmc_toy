@@ -137,15 +137,35 @@ void print_states_T_order(chain_state* state){
   } 
 }
 
-void print_states_cold_only(chain_state* state){ 
-  for(int it=0; it < 1; it++){
+void print_states_cold_only(chain_state* state){ // print L and R T-level 0
+  int it = 0;
+  {
     int iw = state->t_Lws[it];
     printf("%2i %2i %3i  ", iw, it, state->w_transition_counts[iw]);
     for(int j=0; j < state->n_dims; j++){
       printf("%5.3f ", state->w_xs[iw][j]);
     }printf("   ");    
   } 
-  for(int it=0; it < 1; it++){
+  {
+    int iw = state->t_Rws[it];
+    printf("%2i %2i %3i  ", iw, it, state->w_transition_counts[iw]);
+    for(int j=0; j < state->n_dims; j++){
+      printf("%5.3f ", state->w_xs[iw][j]);
+    }printf("   ");    
+  } 
+}
+
+void print_states_L0_Rtop_only(chain_state* state){ // print L level 0, R level n_Ts-1
+  int it = 0;
+  {
+    int iw = state->t_Lws[it];
+    printf("%2i %2i %3i  ", iw, it, state->w_transition_counts[iw]);
+    for(int j=0; j < state->n_dims; j++){
+      printf("%5.3f ", state->w_xs[iw][j]);
+    }printf("   ");    
+  }
+  it = state->n_Ts-1;
+  {
     int iw = state->t_Rws[it];
     printf("%2i %2i %3i  ", iw, it, state->w_transition_counts[iw]);
     for(int j=0; j < state->n_dims; j++){
