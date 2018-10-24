@@ -8,7 +8,9 @@ my ($n_dims, $n_Ts, $peak_separation, $height_ratio) = (undef, undef, undef, und
 my $n_data_lines = 0;
 
 my $n_print = 100;
-my $n_print_factor = 1.2;
+my $n_print_factor = 1.05;
+
+
 
 while (<>) {
    if (/^\s*#/) {
@@ -24,6 +26,9 @@ $true_x_mean[0] = 0.5*$peak_separation*($height_ratio - 1.0)/(1.0 + $height_rati
 my @xsum = ( (0) x $n_dims);
 my @ysum = ( (0) x $n_dims);
 my $i_update;
+
+#print "columns to use (unit based): ", 5, "  ", 4 + $n_dims, "\n";
+#print "columns to use (unit based): ", 5 + (2*$n_Ts-1)*($n_dims+3), "  ", 5 + (2*$n_Ts-1)*($n_dims+3) + $n_dims-1, "\n";
 while (<>) {
    next if(/^\s*#/);
    my @cols = split(" ", $_);
@@ -35,9 +40,10 @@ while (<>) {
    my $offset = 2;
    my @x =  @cols[$offset+1..$offset+$n_dims];
    accumulate_vector_sum(\@xsum, \@x);
-
+#print "zero based first cols: ", $offset+1, "  ", $offset+$n_dims, "\n";
    $offset = 2 + (2*$n_Ts - 1)*($n_dims+3);
    my @y =  @cols[$offset+1..$offset+$n_dims];
+#print "zero based last cols: ", $offset+1, "  ", $offset+$n_dims, "\n";
    accumulate_vector_sum(\@ysum, \@y);
 
       if ($i_update >= $n_print) {

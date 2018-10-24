@@ -12,6 +12,7 @@
 
 gsl_rng* g_rng;
 double Lsq;
+int two_body_interpolation_type;
 
 // ************* main: ******************
 
@@ -43,9 +44,12 @@ int main(int argc, char* argv[]){
   sprintf(output_order, "%s", (argc >= 14)? argv[13] : "unknown"); // 1: walkerwise, 0: T-wise, -1 cold only
 
   double kernel_scale =  (argc >= 15)? atof(argv[14])  : 0.5*peak_separation;
+  Lsq = pow(kernel_scale, 2.0);
+
+  two_body_interpolation_type = (argc >= 16)? atoi(argv[15]) : 0; // 0 => geometric, 1 => linear
   // ***** 
 
-  Lsq = pow(kernel_scale, 2.0);
+  
 
   double* inverse_Temperatures = (double*)malloc(n_Ts*sizeof(double)); // the inverse temperatures 
   inverse_Temperatures[0] = 1.0; // cold
@@ -60,7 +64,7 @@ int main(int argc, char* argv[]){
          n_peaks, peak_separation, peak_width, height_ratio, shape_param);
 
   printf("# proposal width: %5.3f, rng seed: %8i,  thin: %5i, output order: %12s \n", prop_w, seed, n_thin, output_order);
-
+  printf("# interpolation type: %s \n", (two_body_interpolation_type == 0)? "geometric" : "linear");
 
   // ***** Set up RNG *****
   gsl_rng_env_setup();
@@ -80,19 +84,21 @@ int main(int argc, char* argv[]){
   // ******************************************
   // ***** Loop through n_updates updates *****
   for(int i = 0; i <= n_updates; i++){ // loop through updates
-    if(0){
+    if(0){ // standard 1-body heating.
       for(int j = 0; j < 2*n_Ts; j++){ // update positions of walkers
         update_x(the_peaks, the_chain_state, inverse_Temperatures[the_chain_state->w_ts[j]], prop_w, j); 
       }
-        T_swap(the_chain_state, inverse_Temperatures);
-    }else{
+      T_swap(the_chain_state, inverse_Temperatures);
+    }else{ // 2-body auxiliary distributions
       for(int j = 0; j < n_Ts; j++){
         update_x_2b(the_peaks, the_chain_state, inverse_Temperatures[j], prop_w, j);
       }
-      T_swap_2b(the_chain_state, inverse_Temperatures);
+        T_swap_2b_A(the_chain_state, inverse_Temperatures); // for each pain of levels: propose swapping both x and y at once, then accept/reject.
+        T_swap_2b_B(the_chain_state, inverse_Temperatures); // for each pair of levels: propose swapping x, accept/reject; then propose swapping y, accept/reject.
     }
-    check_state_consistency(the_chain_state);
+    
     if(i % n_thin == 0){
+      check_state_consistency(the_chain_state, inverse_Temperatures);
       printf("%5i ", i);
       if(strcmp(output_order, "T") == 0){
         print_states_T_order(the_chain_state);
@@ -120,7 +126,7 @@ int main(int argc, char* argv[]){
   } //printf("\n");
   printf("# T-swap acceptance rates:\n");
   for(int it = 0; it < n_Ts-1; it++){
-    printf("#   T-levels: %1i-%1i P_A L,R,avg: %5.3f %5.3f %5.3f \n", it, it+1, 
+    printf("#   T-levels: %1i-%1i P_A L,R,both: %5.3f %5.3f %5.3f \n", it, it+1, 
            the_chain_state->t_Tswap_Laccepts[it]/(1.0*n_updates),
            the_chain_state->t_Tswap_Raccepts[it]/(1.0*n_updates),
            the_chain_state->t_Tswap_accepts[it]/(2.0*n_updates)); 

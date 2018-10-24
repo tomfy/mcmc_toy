@@ -5,7 +5,6 @@ use Getopt::Long;
 my $n_updates = 10000;
 my $n_dimensions = 2;
 
-
 my $n_peaks = 2;
 my $peak_separation = 2.0;
 my $peak_width = 0.25;
@@ -22,7 +21,9 @@ my $rng_seed = 1234567;
 
 my $n_thin = 100;
 
-my $output_order = 'T'; # 1:walker, 0: 
+my $output_order = 'T'; # 1:walker, 0:
+
+my $interpolation_type = 'geometric';
 
 GetOptions(
            'updates=i' => \$n_updates,
@@ -43,7 +44,12 @@ GetOptions(
 
            'thin=i' => \$n_thin,
            'output_order=s' => \$output_order,
+           'interpolation=s' => \$interpolation_type,
 );
+
+if($interpolation_type ne 'linear' and $interpolation_type ne 'geometric'){
+   warn "interpolation type: $interpolation_type is unknown. Setting to 'geometric'.\n";
+}
 
 
 my $command = "~/mcmc_toy/2body/mcmc2body  $n_updates $n_dimensions $n_Ts $Thot  ";
@@ -57,6 +63,7 @@ $order = "cold only";
 }
 $command .= "$order ";
 $command .= "$kernel_scale ";
+$command .= ($interpolation_type eq 'geometric')? 0 : 1;
 
 print "#  $command \n";
 system "$command";
