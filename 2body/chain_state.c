@@ -10,11 +10,10 @@
 #include "mcmc2body.h"
 #include "target.h"
 #include "chain_architecture.h"
-#include "mcmc2body_structs.h"
+#include "chain_state.h"
 
 // function definitions:
 
-//  chain_state  function definitions: 
 chain_state* set_up_chain_state(int n_dims, int n_Ts, target* the_target, chain_architecture* arch, double init_width){
   chain_state* the_chain_state = (chain_state*)malloc(sizeof(chain_state));
   int n_walkers = 2*n_Ts;
@@ -99,14 +98,14 @@ void print_states_T_order(chain_state* state){
   
   for(int it=0; it < state->n_Ts; it++){
     int iw = state->t_Lws[it];
-    printf("%2i %2i %3i  ", iw, it, state->w_transition_counts[iw]);
+    printf("%2i %2i %3i %3i  ", iw, it, state->w_transition_counts[iw], state->t_Ltransition_counts[it]);
     for(int j=0; j < state->n_dims; j++){
       printf("%7.5f ", state->w_xs[iw][j]);
     }printf("   ");    
   } 
   for(int it=0; it < state->n_Ts; it++){
     int iw = state->t_Rws[it];
-    printf("%2i %2i %3i  ", iw, it, state->w_transition_counts[iw]);
+    printf("%2i %2i %3i %3i  ", iw, it, state->w_transition_counts[iw], state->t_Rtransition_counts[it]);
     for(int j=0; j < state->n_dims; j++){
       printf("%7.5f ", state->w_xs[iw][j]);
     }printf("   ");    
@@ -207,8 +206,7 @@ int check_state_consistency(target* the_target, chain_architecture* arch, chain_
 // end  chain_state  functions
 
 
-
-
+// ************************ 1-body updates *************************************
 
 void update_x(target* the_target, chain_architecture* arch, chain_state* state, int iw){
   double pi_x = state->w_pis[iw]; 
@@ -294,6 +292,8 @@ void T_swap(chain_state* state, double* inverse_Temperatures){
   }
 }
 
+// ****************** 2-body updates ************************************
+
 void update_x_2b(target* the_target, chain_architecture* arch, chain_state* state, int it){
 
   double Lprop_w = arch->Lprop_widths[it];
@@ -318,6 +318,10 @@ void update_x_2b(target* the_target, chain_architecture* arch, chain_state* stat
     double Dsqr_prop = Dsquared(state->n_dims, propx, state->w_xs[iw_y]);
     double PI_propx_y = PI(pi_propx, pi_y, it, state->n_Ts, Kernel(Dsqr_prop, Lsqr), arch); 
     if( (PI_propx_y > PI_x_y)  ||  (gsl_rng_uniform(g_rng)*PI_x_y  <  PI_propx_y) ){ // Accept proposal
+
+      int old_near_peak = (state->w_xs[iw_x][0] <= 0)? -1 : 1;
+      int new_near_peak = (propx[0] <= 0)? -1 : 1;
+      if(new_near_peak != old_near_peak){ state->t_Ltransition_counts[it]++; }
 
       state->w_pis[iw_x] = pi_propx;
       free(state->w_xs[iw_x]);  
@@ -348,6 +352,10 @@ void update_x_2b(target* the_target, chain_architecture* arch, chain_state* stat
     double PI_x_propy = PI(pi_x, pi_propy, it, state->n_Ts, Kernel(Dsqr_prop, Lsqr), arch); 
     if( (PI_x_propy > PI_x_y)  ||  (gsl_rng_uniform(g_rng)*PI_x_y <  PI_x_propy) ){ // Accept proposal
 
+      int old_near_peak = (state->w_xs[iw_x][0] <= 0)? -1 : 1;
+      int new_near_peak = (propy[0] <= 0)? -1 : 1;
+      if(new_near_peak != old_near_peak){ state->t_Rtransition_counts[it]++; }
+
       state->w_pis[iw_y] = pi_propy;
       free(state->w_xs[iw_y]);  
       state->w_xs[iw_y] = propy;
@@ -365,7 +373,7 @@ void update_x_2b(target* the_target, chain_architecture* arch, chain_state* stat
 }
 
 void cold_transition_observe_and_count(chain_state* state){
-  // a walkers nearest peak is only reset when the walker is cold (i.e. x, it=0, or y, it=nTs-1
+  // a walke'rs nearest peak is only reset when the walker is cold (i.e. x, it=0, or y, it=nTs-1
   // a transition occurs if previous near peak (when walker was cold) is different from latest near peak.
   int it = 0;
   // L (i.e. x)

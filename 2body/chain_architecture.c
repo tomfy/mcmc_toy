@@ -10,7 +10,7 @@
 #include "mcmc2body.h"
 #include "target.h"
 #include "chain_architecture.h"
-#include "mcmc2body_structs.h"
+#include "chain_state.h"
 
 // *****************************************************************************************************
 
