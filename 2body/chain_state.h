@@ -56,10 +56,13 @@ void LR_swap(chain_architecture* arch, chain_state* state);
 void update_x_2b(target* the_target, chain_architecture* arch, chain_state* state, int it);
 void T_swap_2b_A(chain_architecture* arch, chain_state* state);
 void T_swap_2b_B(chain_architecture* arch, chain_state* state);
-void cold_transition_observe_and_count(chain_state* state);
+
+void step_1b(target* target, chain_architecture* arch, chain_state* state);
+void step_2b(target* target, chain_architecture* arch, chain_state* state);
+
+void cold_transition_observe_and_count_sym(chain_state* state);
+void cold_transition_observe_and_count_asym(chain_state* state);
 
 
-double Kernel(double Dsq, double Lsq);
-double PI(double pix, double piy, int it, int n_Ts, double K, chain_architecture* arch);
 
 // the end

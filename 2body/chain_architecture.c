@@ -4,21 +4,22 @@
 #include <string.h>
 #include <time.h>
 #include <assert.h>
-#include <gsl/gsl_rng.h>
-#include <gsl/gsl_randist.h>
-#include <gsl/gsl_cdf.h>
-#include "mcmc2body.h"
+//#include <gsl/gsl_rng.h>
+//#include <gsl/gsl_randist.h>
+//#include <gsl/gsl_cdf.h>
 #include "target.h"
 #include "chain_architecture.h"
-#include "chain_state.h"
+// #include "chain_state.h"
+// #include "mcmc2body.h"
 
 // *****************************************************************************************************
 
-chain_architecture* set_up_chain_architecture(int n_per_level, int symmetry, int n_levels, double Thot, double min_prop_w, double max_prop_w, double min_kernel_width, double max_kernel_width){
+chain_architecture* set_up_chain_architecture(int n_per_level, int symmetry, int n_levels, double Thot, double min_prop_w, double max_prop_w, double min_kernel_width, double max_kernel_width, double two_body_interpolation_power){
   chain_architecture* chain_arch = (chain_architecture*)malloc(sizeof(chain_architecture));
   chain_arch->symmetry = symmetry;
   chain_arch->n_per_level = n_per_level;
   chain_arch->n_levels = n_levels;
+  chain_arch->two_body_interpolation_power = two_body_interpolation_power; //
   chain_arch->inverse_Temperatures = (double*)malloc(n_levels*sizeof(double));
   chain_arch->Lprop_widths = (double*)malloc(n_levels*sizeof(double));
   chain_arch->Rprop_widths = (double*)malloc(n_levels*sizeof(double));
@@ -82,3 +83,38 @@ void print_chain_architecture_info(chain_architecture* arch){
 }
 
 // **************************************************************************************************
+
+double Kernel(double Dsq, double Lsq){ // convolution kernel
+  return exp(-0.5*Dsq/Lsq);
+  //  return (Dsq >= Lsq)? 0.0 : 1.0 - Dsq/Lsq;
+}
+
+double PI(double pix, double piy, int it, int n_Ts, double K, chain_architecture* arch){
+  if(arch->symmetry == 1){
+    if(it == 0){
+      return pix*K;
+    }else{
+      int itop = n_Ts - 1;
+      if(it == itop){
+        return piy*K;
+      }else{
+        if(arch->two_body_interpolation_power == 1){
+          double pixpiylc = (1.0 - 1.0*it/itop)*pix + (1.0*it/itop)*piy;  // linear interpolation (equiv. to P = 1)
+          return pixpiylc*K;
+        }else if(arch->two_body_interpolation_power == 0){
+          return pow(pix, (1.0 - 1.0*it/itop)) * pow(piy, 1.0*it/itop) * K;  // geometric interpolation (P -> 0 limit)
+        }else{
+          double power = arch->two_body_interpolation_power;
+          double result = pow( 
+                              (1.0 - 1.0*it/itop)*pow(pix,power)  +  (1.0*it/itop)*pow(piy, power)
+                              , (1.0/power) ) * K; // weighted power mean
+          //  printf("%g %g %g  %g\n", pix, piy, result, two_body_interpolation_power);
+          return result;
+        }
+      }
+    }
+  }else{ // asymmetrical
+    return pix*K;
+  }
+}
+    

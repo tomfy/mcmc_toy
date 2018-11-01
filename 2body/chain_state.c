@@ -7,10 +7,10 @@
 #include <gsl/gsl_rng.h>
 #include <gsl/gsl_randist.h>
 #include <gsl/gsl_cdf.h>
-#include "mcmc2body.h"
 #include "target.h"
 #include "chain_architecture.h"
 #include "chain_state.h"
+#include "mcmc2body.h"
 
 // function definitions:
 
@@ -223,6 +223,11 @@ void update_x(target* the_target, chain_architecture* arch, chain_state* state, 
 
   double pi_prop_x = pi(the_target, prop_x);
   if( (pi_prop_x > pi_x)  ||  (gsl_rng_uniform(g_rng)  <  pow(pi_prop_x/pi_x, Tinverse)) ){ // Accept proposal
+    {
+   int old_near_peak = (state->w_xs[iw][0] <= 0)? -1 : 1;
+      int new_near_peak = (prop_x[0] <= 0)? -1 : 1;
+      if(new_near_peak != old_near_peak){ state->t_Ltransition_counts[it]++; }
+    }
     state->w_pis[iw] = pi_prop_x;
     free(state->w_xs[iw]);  
     state->w_xs[iw] = prop_x;
@@ -340,7 +345,7 @@ void update_x_2b(target* the_target, chain_architecture* arch, chain_state* stat
   }
   // update y
   {  
-    pi_x = state->w_pis[iw_x]; // x may have changed above, so get the up-to-date value!
+    pi_x = state->w_pis[iw_x]; // x and pi_x may have changed above, so get the up-to-date value!
     double* propy = (double*)malloc(state->n_dims*sizeof(double));
     for(int i = 0; i < state->n_dims; i++){ // propose a new position
       propy[i] = state->w_xs[iw_y][i] + gsl_ran_gaussian(g_rng, Rprop_w); // normal (aka gaussian) proposal
@@ -352,7 +357,7 @@ void update_x_2b(target* the_target, chain_architecture* arch, chain_state* stat
     double PI_x_propy = PI(pi_x, pi_propy, it, state->n_Ts, Kernel(Dsqr_prop, Lsqr), arch); 
     if( (PI_x_propy > PI_x_y)  ||  (gsl_rng_uniform(g_rng)*PI_x_y <  PI_x_propy) ){ // Accept proposal
 
-      int old_near_peak = (state->w_xs[iw_x][0] <= 0)? -1 : 1;
+      int old_near_peak = (state->w_xs[iw_y][0] <= 0)? -1 : 1;
       int new_near_peak = (propy[0] <= 0)? -1 : 1;
       if(new_near_peak != old_near_peak){ state->t_Rtransition_counts[it]++; }
 
@@ -372,8 +377,8 @@ void update_x_2b(target* the_target, chain_architecture* arch, chain_state* stat
   }
 }
 
-void cold_transition_observe_and_count(chain_state* state){
-  // a walke'rs nearest peak is only reset when the walker is cold (i.e. x, it=0, or y, it=nTs-1
+void cold_transition_observe_and_count_sym(chain_state* state){
+  // a walker's nearest peak is only reset when the walker is cold (i.e. x, it=0, or y, it=nTs-1
   // a transition occurs if previous near peak (when walker was cold) is different from latest near peak.
   int it = 0;
   // L (i.e. x)
@@ -391,6 +396,22 @@ void cold_transition_observe_and_count(chain_state* state){
     state->w_transition_counts[iw]++;
     state->w_near_peak[iw] = new_near_peak;
   }
+}
+
+void cold_transition_observe_and_count_asym(chain_state* state){
+  // asymmetrical; L <-> cold.
+  // a walker's nearest peak is only reset when the walker is cold (i.e. x, it=0, or y, it=nTs-1
+  // a transition occurs if previous near peak (when walker was cold) is different from latest near peak.
+  for(int it = 0; it < state->n_Ts; it++){
+  // L (i.e. x)
+  int iw = state->t_Lws[it];
+  int new_near_peak = (state->w_xs[iw][0] < 0)? -1 : 1;
+  if(new_near_peak != state->w_near_peak[iw]){
+    state->w_transition_counts[iw]++;
+    state->w_near_peak[iw] = new_near_peak;
+  }
+  }
+
 }
 
 void T_swap_2b_A(chain_architecture* arch, chain_state* state){ // swap both x and y between T levels at same time.
@@ -602,44 +623,27 @@ void LR_swap(chain_architecture* arch, chain_state* state){
 }
 
 
+void step_1b(target* target, chain_architecture* arch, chain_state* state){    
+  for(int iw = 0; iw < state->n_walkers; iw++){ // update positions of walkers
+    update_x(target, arch, state, iw); 
+  }
+  T_swap(state, arch->inverse_Temperatures);
+}
+
+
+void step_2b(target* target, chain_architecture* arch, chain_state* state){    
+  for(int level = 0; level < arch->n_levels; level++){
+    update_x_2b(target, arch, state, level);
+  }
+  T_swap_2b_A(arch, state); // for each pair of levels: propose swapping both x and y at once, then accept/reject.
+  T_swap_2b_B(arch, state); // for each pair of levels: propose swapping x, accept/reject; then propose swapping y, accept/reject.
+  if(arch->symmetry == 0){
+    LR_swap(arch, state);
+  }
+}
 
 // ************************************************************
 
-double Kernel(double Dsq, double Lsq){ // convolution kernel
-  return exp(-0.5*Dsq/Lsq);
-  //  return (Dsq >= Lsq)? 0.0 : 1.0 - Dsq/Lsq;
-}
-
-double PI(double pix, double piy, int it, int n_Ts, double K, chain_architecture* arch){
-  //  return pow(pix*piy, Tinverse);
-  //  printf("Symm: %5i \n", arch->symmetry);
-  if(arch->symmetry == 1){
-    if(it == 0){
-      return pix*K;
-    }else{
-      int itop = n_Ts - 1;
-      if(it == itop){
-        return piy*K;
-      }else{
-        if(two_body_interpolation_power == 1){
-          double pixpiylc = (1.0 - 1.0*it/itop)*pix + (1.0*it/itop)*piy;  // linear interpolation (equiv. to P = 1)
-          return pixpiylc*K;
-        }else if(two_body_interpolation_power == 0){
-          return pow(pix, (1.0 - 1.0*it/itop)) * pow(piy, 1.0*it/itop) * K;  // geometric interpolation (P -> 0 limit)
-        }else{
-          double result = pow( 
-                              (1.0 - 1.0*it/itop)*pow(pix,two_body_interpolation_power)  +  (1.0*it/itop)*pow(piy, two_body_interpolation_power)
-                              , (1.0/two_body_interpolation_power) ) * K; // weighted power mean
-          //  printf("%g %g %g  %g\n", pix, piy, result, two_body_interpolation_power);
-          return result;
-        }
-      }
-    }
-  }else{ // asymmetrical
-    return pix*K;
-  }
-}
-    
 // the end
 
 

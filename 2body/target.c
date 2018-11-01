@@ -4,13 +4,10 @@
 #include <string.h>
 #include <time.h>
 #include <assert.h>
-#include <gsl/gsl_rng.h>
-#include <gsl/gsl_randist.h>
-#include <gsl/gsl_cdf.h>
-#include "mcmc2body.h"
+//#include <gsl/gsl_rng.h>
+//#include <gsl/gsl_randist.h>
+//#include <gsl/gsl_cdf.h>
 #include "target.h"
-// #include "chain_architecture.h"
-// #include "mcmc2body_structs.h"
 
 // target  function definitions
 target* set_up_target(int n_dims, int n_peaks, double spacing, double width, double height_ratio, double shape_param){
@@ -32,6 +29,7 @@ target* set_up_target(int n_dims, int n_peaks, double spacing, double width, dou
     the_target->peaks[i] = a_peak; 
     peak_height *= height_ratio;
   }
+  the_target->pi_evaluation_count = 0;
   return the_target;
 }
 
@@ -56,6 +54,6 @@ double pi(target* the_target, double* x){
     }
     result += a_peak->height * peak_result;
   }
-  pi_evaluation_count++;
+  the_target->pi_evaluation_count++;
   return result;
 }

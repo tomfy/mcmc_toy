@@ -10,6 +10,7 @@ typedef struct{
 typedef struct{
   int n_peaks;
   peak** peaks;
+  long pi_evaluation_count;
 }target;
 
 

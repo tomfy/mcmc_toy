@@ -11,12 +11,12 @@ my $peak_width = 0.25;
 my $peak_height_ratio = 0.25;
 my $peak_shape_param = 1.0;
 
-my $n_Ts = 2;
+my $levels = 2;
 my $Thot = 2.0;
 my $kernel_scale = 0.5*$peak_separation;
 
 
-my $proposal_width = 0.5;
+my $proposal_width_factor = 0.5;
 my $rng_seed = 1234567;
 
 my $n_thin = 100;
@@ -37,11 +37,11 @@ GetOptions(
            'peak_height_ratio=f' => \$peak_height_ratio,
            'peak_shape=f' => \$peak_shape_param,
 
-           'nTs=i' => \$n_Ts,
+           'levels=i' => \$levels,
            'Thot=f' => \$Thot,
            'kernel_scale=f' => \$kernel_scale,
 
-           'proposal_width=f' => \$proposal_width,
+           'proposal_width=f' => \$proposal_width_factor,
            'seed=i' => \$rng_seed,
 
            'thin=i' => \$n_thin,
@@ -53,9 +53,9 @@ GetOptions(
 );
 
 
-my $command = "~/mcmc_toy/2body/mcmc2body  $n_updates $n_dimensions $n_Ts $Thot  ";
+my $command = "~/mcmc_toy/2body/mcmc2body  $n_updates $n_dimensions $levels $Thot  ";
 $command .= "$n_peaks $peak_separation $peak_width $peak_height_ratio $peak_shape_param  ";
-$command .= "$proposal_width $rng_seed $n_thin  ";
+$command .= "$proposal_width_factor $rng_seed $n_thin  ";
 my $order = "T";
 if($output_order =~ /walker/){
 $order = "walker";
