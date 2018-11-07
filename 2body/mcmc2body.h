@@ -1,8 +1,3 @@
-//
-
-extern const gsl_rng_type* g_rng_type;
-extern gsl_rng* g_rng;
-
-double Dsquared(int n_dims, double* x, double* y);
+double* est_mean_pi(chain_architecture* arch, chain_state* state); // get the 'best' estimates of the mean of pi
 
 // the end

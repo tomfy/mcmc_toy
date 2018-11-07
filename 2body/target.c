@@ -4,12 +4,72 @@
 #include <string.h>
 #include <time.h>
 #include <assert.h>
-//#include <gsl/gsl_rng.h>
-//#include <gsl/gsl_randist.h>
-//#include <gsl/gsl_cdf.h>
+#include <gsl/gsl_rng.h>
+#include <gsl/gsl_randist.h>
+#include <gsl/gsl_cdf.h>
+#include "globals.h"
+#include "util.h"
 #include "target.h"
+// #include "mcmc2body.h"
+
+long pi_evaluation_count;
 
 // target  function definitions
+
+target* set_up_target_from_argv(char** argv, int* i){
+  int i_arg = *i;
+  int n_dims = atoi(argv[i_arg++]);
+  int n_peaks = atoi(argv[i_arg++]);
+  target* the_target = (target*)malloc(sizeof(target));
+  the_target->n_dims = n_dims;
+  the_target->n_peaks = n_peaks;
+  the_target->peaks = (peak**)malloc(n_peaks*sizeof(peak*));
+  the_target->mean_x = (double*)calloc(n_dims, sizeof(double));
+  double sum_weights = 0;
+  double* x_wsum = (double*)calloc(n_dims, sizeof(double));
+  for(int i_peak = 0; i_peak < n_peaks; i_peak++){
+      
+    peak* a_peak = (peak*)malloc(sizeof(peak));
+    a_peak->n_dims = n_dims;
+    a_peak->type = atoi(argv[i_arg++]);
+    //    printf("i_peak, %d; type: %d \n", i_peak, a_peak->type);
+    double* position = (double*)malloc(n_dims*sizeof(double));
+    for(int i = 0; i < n_dims; i++){
+      position[i] = atof(argv[i_arg++]);
+      //     printf("i_peak: %d ; i, position[i]: %d %10.6g \n", i_peak, i, position[i]);
+    }
+    a_peak->position = position;
+    a_peak->height = atof(argv[i_arg++]);
+    a_peak->width = atof(argv[i_arg++]);
+    a_peak->shape = atof(argv[i_arg++]);
+    //    printf("   h, w, s: %10.6g %10.6g %10.6g \n", a_peak->height, a_peak->width, a_peak->shape);
+    the_target->peaks[i_peak] = a_peak;
+    double weight = a_peak->height * pow(a_peak->width, n_dims);
+    for(int i = 0; i < n_dims; i++){
+      x_wsum[i] += weight * position[i];
+    }
+    sum_weights += weight;
+  }
+  for(int i = 0; i < n_dims; i++){
+    the_target->mean_x[i] = x_wsum[i] / sum_weights;
+  }
+
+  //  the_target->pi_evaluation_count = 0;
+  *i = i_arg;
+  return the_target;
+}
+
+target* set_up_target_from_peaks(int n_peaks, peak** the_peaks){
+  target* the_target = (target*)malloc(sizeof(target));
+  the_target->n_peaks = n_peaks;
+  the_target->peaks = (peak**)malloc(n_peaks*sizeof(peak*)); // array of pointers to peaks.
+  for(int i=0; i<n_peaks; i++){
+    the_target->peaks[i] = the_peaks[i];
+  }
+  //  the_target->pi_evaluation_count = 0;
+  return the_target;
+}
+
 target* set_up_target(int n_dims, int n_peaks, double spacing, double width, double height_ratio, double shape_param){
   target* the_target = (target*)malloc(sizeof(target));
   the_target->n_peaks = n_peaks;
@@ -29,15 +89,15 @@ target* set_up_target(int n_dims, int n_peaks, double spacing, double width, dou
     the_target->peaks[i] = a_peak; 
     peak_height *= height_ratio;
   }
-  the_target->pi_evaluation_count = 0;
+  //  the_target->pi_evaluation_count = 0;
   return the_target;
 }
 
-void print_target_info(target* the_target){
+void print_target_info(const target* const the_target){
 }
 
 // the density to be sampled:
-double pi(target* the_target, double* x){
+double pi(const target* const the_target, const double* const x){
   double result = 0.0;
   for(int k = 0; k < the_target->n_peaks; k++){   
     double peak_result;
@@ -54,6 +114,7 @@ double pi(target* the_target, double* x){
     }
     result += a_peak->height * peak_result;
   }
-  the_target->pi_evaluation_count++;
+  //  the_target->
+  pi_evaluation_count++;
   return result;
 }

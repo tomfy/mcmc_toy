@@ -7,191 +7,265 @@
 #include <gsl/gsl_rng.h>
 #include <gsl/gsl_randist.h>
 #include <gsl/gsl_cdf.h>
+#include "globals.h"
+#include "util.h"
 #include "target.h"
 #include "chain_architecture.h"
 #include "chain_state.h"
 #include "mcmc2body.h"
 
 gsl_rng* g_rng;
-// long pi_evaluation_count;
+long pi_evaluation_count; 
 
 // ************* main: ******************
 
 int main(int argc, char* argv[]){
 
-// ***** process command line args *****
-int n_updates = (argc >= 2)? atoi(argv[1]) : 100000; // number of updates to do
-int n_dims = (argc >= 3)? atoi(argv[2]) : 3; // number of dimensions
+  // ***** process command line args *****
 
-int n_Ts = (argc >= 4)? atoi(argv[3]) : 3; // number of T levels
- if(n_Ts < 1){ n_Ts = 1; } 
- double Thot = (argc >= 5)? atof(argv[4]) : 2.0;
- double Tratio = (n_Ts > 1)? pow(Thot, 1.0/(n_Ts-1)) : 1.0; // Tratio for geometric Temperatures
+  // target arguments:
+  int i_arg = 1;
+  target* the_target = set_up_target_from_argv(argv, &i_arg);
+
+  // chain_architecture arguments:
+  int n_levels = atoi(argv[i_arg++]);
+  int n_per_level = atoi(argv[i_arg++]); // 1 ('1-body') or 2 ('2_body')
+  int symmetry = atoi(argv[i_arg++]); // 0: asymmetrical; 1: symmetrical.
+  double Thot = atof(argv[i_arg++]);
+  double kernel_width = atof(argv[i_arg++]);
+  double proposal_width_factor = atof(argv[i_arg++]);
+  double interpolation_power = atof(argv[i_arg++]); // used in symmetrical 2-body
+
+  // run arguments:
+  long seed = atoi(argv[i_arg++]);
+  double burn_in_arg = atof(argv[i_arg++]);
+  long n_updates = atoi(argv[i_arg++]);
+  long burn_in = (burn_in_arg > 0)? (long)burn_in_arg : (long)(fabs(burn_in_arg) * n_updates);
+  long n_runs = atoi(argv[i_arg++]);
+
+  // output arguments:
+  int n_thin =  atoi(argv[i_arg++]);
+  char* output_format = (char*)malloc(32*sizeof(char)); 
+  sprintf(output_format, "%s", argv[i_arg++]);
+  int verbose = atoi(argv[i_arg++]);
+
+  // ******  
  
+  // ***** output the run parameters *****
+  printf("# dimensions: %i \n", the_target->n_dims);
+  printf("# n_peaks: %i \n", the_target->n_peaks);
 
- int n_peaks = (argc >= 6)? atoi(argv[5]) : 2;
- double peak_separation = (argc >= 7)? atof(argv[6]) : 1.0; // spacing parameter; peaks are at x[0] = +-peak_separation/2, other coordinates all zero.
- double peak_width = (argc >= 8)? atof(argv[7]) : 0.2; // width parameter; stddev if peak is Normal.
- double height_ratio = (argc >= 9)? atof(argv[8]) : 0.25; // height of peak i+1 rel to peak i.
- double shape_param = (argc >= 10)? atof(argv[9]) : 1.0; 
+  printf("# n_levels: %i \n", n_levels);
+  printf("# n_per_level: %i \n", n_per_level);
+  printf("# symmetry: %i \n", symmetry);
+  printf("# Thot: %10.6g  kernel_width: %10.8g \n", Thot, kernel_width);
+  printf("# proposal_width_factor: %10.8g \n", proposal_width_factor);
+  printf("# interpolation_power: %10.8g \n", interpolation_power);
 
- double prop_w_factor = (argc >= 11)? atof(argv[10]) : 2.0;
+  printf("# seed: %ld \n", seed);
+  printf("# burn-in: %ld,  updates: %ld \n", burn_in, n_updates);
+  printf("# runs: %ld \n", n_runs);
 
- int seed = (argc >= 12)? atoi(argv[11])  : 12345; // rng seed
+  printf("# n_thin: %d \n", n_thin);
+  printf("# output format %s \n", output_format);
+  printf("# verbosity: %d \n", verbose);
 
- int n_thin = (argc >= 13)? atoi(argv[12])  : 128; // only output every n_thinth
+  double peak_width = fmin(the_target->peaks[0]->width, the_target->peaks[1]->width);
+  // int verbose = 0;
 
- char* output_order = (char*)malloc(32*sizeof(char));
- sprintf(output_order, "%s", (argc >= 14)? argv[13] : "unknown"); // 1: walkerwise, 0: T-wise, -1 cold only
-
- double kernel_scale =  (argc >= 15)? atof(argv[14])  : 0.5*peak_separation;
-
- double two_body_interpolation_power = (argc >= 16)? atof(argv[15]) : 0; // 0 => geometric, 1 => linear
- int n_per_level = (argc >= 17)? atoi(argv[16]) : 2;
- int symmetry = (argc >= 18)? atoi(argv[17]) : 1;
-
- long burn_in = 10000;
-
- // ******  
-
- double* inverse_Temperatures = (double*)malloc(n_Ts*sizeof(double)); // the inverse temperatures 
- inverse_Temperatures[0] = 1.0; // cold
- for(int i = 1; i < n_Ts; i++){
-   inverse_Temperatures[i] = inverse_Temperatures[i-1] / Tratio;
- }
-
- 
- // ***** output the run parameters *****
- printf("# n_per_level: %i \n", n_per_level);
- printf("# n updates: %5i, n_dims: %2i, n_Ts: %2i, Thot: %6.3f, Tratio: %6.3f Kernel_scale: %5.3f\n", 
-        n_updates, n_dims, n_Ts, Thot, Tratio, kernel_scale);
- printf("# n peaks: %3i, peak separation: %5.3f, peak width: %5.3f, height ratio: %5.3f shape param: %5.3f  \n", 
-        n_peaks, peak_separation, peak_width, height_ratio, shape_param);
-
- printf("# proposal width factor: %5.3f, rng seed: %8i,  thin: %5i, output order: %12s \n", prop_w_factor, seed, n_thin, output_order);
-
- printf("# interpolation power: %8.6f \n", two_body_interpolation_power);
- printf("# symmetry: %5i \n", symmetry);
+  // ***** Set up RNG *****
+  gsl_rng_env_setup();
+  const gsl_rng_type* rng_type = gsl_rng_default;
+  g_rng = gsl_rng_alloc(rng_type);
+  gsl_rng_set(g_rng, seed);
 
 
+  //*********  Set up target distribution *******************
+  // target* the_target = set_up_target(n_dims, n_peaks, 0.5*peak_separation, peak_width, height_ratio, shape_param);
 
- // ***** Set up RNG *****
- gsl_rng_env_setup();
- const gsl_rng_type* rng_type = gsl_rng_default;
- g_rng = gsl_rng_alloc(rng_type);
- gsl_rng_set(g_rng, seed);
+  //********** Set up the chain architecture ****************
+  chain_architecture* the_arch = set_up_chain_architecture(n_levels, n_per_level, symmetry, Thot, proposal_width_factor*peak_width, proposal_width_factor*kernel_width, peak_width, kernel_width, interpolation_power);
+  print_chain_architecture_info(the_arch);
 
+  // loop over runs: 
+  for(int i_run = 0; i_run < n_runs; i_run++){
+    // ***** Setup initial states of walkers *********
+    double init_width = 2.0*peak_width;
+    chain_state* the_chain_state = set_up_chain_state(the_target, the_arch, init_width);
 
- //*********  Set up target distribution *******************
- target* the_target = set_up_target(n_dims, n_peaks, 0.5*peak_separation, peak_width, height_ratio, shape_param);
+    check_state_consistency(the_target, the_arch, the_chain_state);
 
- //********** Set up the chain architecture ****************
- chain_architecture* the_arch = set_up_chain_architecture(n_per_level, symmetry, n_Ts, Thot, prop_w_factor*peak_width, prop_w_factor*kernel_scale, peak_width, kernel_scale, two_body_interpolation_power);
- print_chain_architecture_info(the_arch);
+    // *************************************************************
+    // ********* Loop through n_updates updates ********************
 
- // ***** Setup initial states of walkers *********
- double init_width = 2.0*peak_width;
- chain_state* the_chain_state = set_up_chain_state(n_dims, n_Ts, the_target, the_arch, init_width);
+    pi_evaluation_count = 0;
+    if(n_per_level == 1){ // standard 1-body heating.
 
+      for(int i = 1; i <= burn_in; i++){ // burn-in
+        step_1b(the_target, the_arch, the_chain_state);
+      }
+      reset_chain_state(the_chain_state);
+      pi_evaluation_count = 0;
 
- check_state_consistency(the_target, the_arch, the_chain_state);
+      for(int i = 1; i <= n_updates; i++){ // loop through updates       
+        step_1b(the_target, the_arch, the_chain_state);
+        accumulate_x_sums(the_chain_state);
 
+        if(i % n_thin == 0){
+          // check_state_consistency(the_target, the_arch, the_chain_state);
+          if(verbose){
+            printf("%5i ", i);
+            if(strcmp(output_format, "T") == 0){
+              print_states_T_order(the_chain_state);
+            }else if(strcmp(output_format, "walker") == 0){
+              print_states_walker_order(the_chain_state);
+            }else{
+              print_states_L0_Rtop_only(the_chain_state);
+            }
+            printf("\n");
+          }
+        }
+      }
 
- // *************************************************************
- // ********* Loop through n_updates updates ********************
+    }else{ // 2-body auxiliary distributions
 
- if(n_per_level == 1){ // standard 1-body heating.
-   for(int i = 0; i <= n_updates; i++){ // loop through updates
+      for(int i = 1; i <= burn_in; i++){ // loop through updates
+        step_2b(the_target, the_arch, the_chain_state);
+      }
+      reset_chain_state(the_chain_state);
+      pi_evaluation_count = 0;
 
-     step_1b(the_target, the_arch, the_chain_state);
- 
-     if(i % n_thin == 0){
-       // check_state_consistency(the_target, the_chain_state, inverse_Temperatures);
-       printf("%5i ", i);
-       if(strcmp(output_order, "T") == 0){
-         print_states_T_order(the_chain_state);
-       }else if(strcmp(output_order, "walker") == 0){
-         print_states_walker_order(the_chain_state);
-       }else{
-         print_states_L0_Rtop_only(the_chain_state);
-       }
-       printf("\n");
-     }
-   }
- }else{ // 2-body auxiliary distributions
-   for(int i = 0; i <= n_updates; i++){ // loop through updates
+      for(int i = 1; i <= n_updates; i++){ // loop through updates
 
-     step_2b(the_target, the_arch, the_chain_state);
-     
-     if(the_arch->symmetry == 1){
-       cold_transition_observe_and_count_sym(the_chain_state);
-     }else if(the_arch->symmetry == 0){
-       cold_transition_observe_and_count_asym(the_chain_state);
-     }
+        step_2b(the_target, the_arch, the_chain_state);
+        accumulate_x_sums(the_chain_state);
+
+        if(the_arch->symmetry == 1){
+          cold_transition_observe_and_count_sym(the_chain_state);
+        }else if(the_arch->symmetry == 0){
+          cold_transition_observe_and_count_asym(the_chain_state);
+        }
     
-     if(i % n_thin == 0){
-       check_state_consistency(the_target, the_arch, the_chain_state);
-       printf("%5i ", i);
-       if(strcmp(output_order, "T") == 0){
-         print_states_T_order(the_chain_state);
-       }else if(strcmp(output_order, "walker") == 0){
-         print_states_walker_order(the_chain_state);
-       }else{
-         print_states_L0_Rtop_only(the_chain_state);
-       }
-       printf("\n");
-     }
-   }
- } // end of loop through updates
- // *********************************************
+        if(i % n_thin == 0){
+          check_state_consistency(the_target, the_arch, the_chain_state);
+          if(verbose){
+            printf("%5i ", i);
+            if(strcmp(output_format, "T") == 0){
+              print_states_T_order(the_chain_state);
+            }else if(strcmp(output_format, "walker") == 0){
+              print_states_walker_order(the_chain_state);
+            }else{
+              print_states_L0_Rtop_only(the_chain_state);
+            }
+            printf("\n");
+          }
+        }
+      }
+    } // end of loop through updates
+    // *********************************************
 
- printf("# ");
- for(int iw = 0; iw < 2*n_Ts; iw++){
-   printf("  %2i %5.3f", iw, the_chain_state->w_accepts[iw]/(1.0*n_updates));
- }printf("\n");
- printf("# X-move acceptance rates:\n");
- for(int it = 0; it < n_Ts; it++){
-   if(n_per_level == 2){
-     printf("#   T-level: %1i P_A: L, R, avg: %5.3f %5.3f \n", it,          
-            the_chain_state->t_Laccepts[it]/(1.0*n_updates),
-            the_chain_state->t_Raccepts[it]/(1.0*n_updates)
-            ); 
-   }else{
-     printf("#   T-level: %1i P_A:  %5.3f %5.3f %5.3f \n", it,   
-            the_chain_state->t_Laccepts[it]/(1.0*n_updates),
-            the_chain_state->t_Raccepts[it]/(1.0*n_updates),       
-            the_chain_state->t_accepts[it]/(2.0*n_updates) );
-   }
- }
- printf("# T-swap acceptance rates:\n");
- for(int it = 0; it < n_Ts-1; it++){
-   printf("#   T-levels: %1i-%1i P_A L,R,both: %5.3f %5.3f %5.3f \n", it, it+1, 
-          the_chain_state->t_Tswap_Laccepts[it]/(1.0*n_updates),
-          the_chain_state->t_Tswap_Raccepts[it]/(1.0*n_updates),
-          the_chain_state->t_Tswap_accepts[it]/(2.0*n_updates)); 
- }
- printf("# LR-swap acceptance rates:\n");
- for(int it = 0; it < n_Ts; it++){
-   printf("#   T-level: %1i P_A: %5.3f \n", it,          
-          the_chain_state->t_LRswap_accepts[it]/(1.0*n_updates)
-          ); 
- }
- printf("# pi evaluation count:  %ld \n", the_target->pi_evaluation_count);
-}
+    if(i_run == 0){
+      printf("# x-update acceptance rates for each walker: \n# ");
+      for(int iw = 0; iw < 2*n_levels; iw++){
+        printf("  %2i %5.3f", iw, the_chain_state->w_accepts[iw]/(1.0*n_updates));
+      }printf("\n");
 
-// end of main
+      printf("# X-move acceptance rates:\n");
+      for(int it = 0; it < n_levels; it++){
+        if(n_per_level == 2){
+          printf("#   T-level: %1i P_A: L, R, avg: %5.3f %5.3f \n", it,          
+                 the_chain_state->t_Laccepts[it]/(1.0*n_updates),
+                 the_chain_state->t_Raccepts[it]/(1.0*n_updates)
+                 ); 
+        }else{
+          printf("#   T-level: %1i P_A:  %5.3f %5.3f %5.3f \n", it,   
+                 the_chain_state->t_Laccepts[it]/(1.0*n_updates),
+                 the_chain_state->t_Raccepts[it]/(1.0*n_updates),       
+                 the_chain_state->t_accepts[it]/(2.0*n_updates) );
+        }
+      }
+
+      printf("# T-swap acceptance rates:\n");
+      for(int it = 0; it < n_levels-1; it++){
+        printf("#   T-levels: %1i-%1i P_A L,R,both: %5.3f %5.3f %5.3f \n", it, it+1, 
+               the_chain_state->t_Tswap_Laccepts[it]/(1.0*n_updates),
+               the_chain_state->t_Tswap_Raccepts[it]/(1.0*n_updates),
+               the_chain_state->t_Tswap_accepts[it]/(2.0*n_updates)); 
+      }
+
+      printf("# LR-swap acceptance rates:\n");
+      for(int it = 0; it < n_levels; it++){
+        printf("#   T-level: %1i P_A: %5.3f \n", it,          
+               the_chain_state->t_LRswap_accepts[it]/(1.0*n_updates)
+               ); 
+      }
+
+      for(int it = 0; it < n_levels; it++){  
+        printf("# Level: %2i LR Xavg: ", it);
+        double* Lxsum = the_chain_state->t_Lxsums[it];
+        for(int i_dim = 0; i_dim < the_target->n_dims; i_dim++){
+          printf("%8.5f ", Lxsum[i_dim] / n_updates);
+        }printf("   ");
+        double* Rxsum = the_chain_state->t_Rxsums[it];
+        for(int i_dim = 0; i_dim < the_target->n_dims; i_dim++){
+          printf("%8.5f ", Rxsum[i_dim] / n_updates);
+        }printf(" \n");
+      }
+
+ printf("# pi evaluation count:  %ld \n", pi_evaluation_count);
+    }
+    // just output the abs error of estimated mean for each level
+    /* for(int i = 0; i < the_target->n_dims; i++){ */
+    /*   printf("%8.6g ", the_target->mean_x[i]); */
+    /* }printf("\n"); */
+    //  printf("L abserrors:  ");
+    printf("# Abs Errors: ");
+    for(int it = 0; it < n_levels; it++){
+      printf("%8.6g ", error(the_target->n_dims, the_target->mean_x, the_chain_state->t_Lxsums[it], n_updates));
+    }printf("  ");
+    //   printf("R abserrors:  ");
+    for(int it = 0; it < n_levels; it++){
+      printf("%8.6g ", error(the_target->n_dims, the_target->mean_x, the_chain_state->t_Rxsums[it], n_updates));
+    }printf("\n");
+    printf("# Pooled Abs Error: %10.8g \n", error(the_target->n_dims, the_target->mean_x, est_mean_pi(the_arch, the_chain_state), 1)); 
+    free(the_chain_state);
+  }
+
+  
+} // end of main
 
 
 // ***** functions *****
 
-double Dsquared(int n_dims, double* x, double* y){
-  double dsq = 0;
-  for(int i = 0; i < n_dims; i++){
-    dsq += (x[i] - y[i])*(x[i] - y[i]);
+
+
+double* est_mean_pi(chain_architecture* arch, chain_state* state){ // get the 'best' estimates of the mean of pi
+  // i.e. using all the nodes which have pi as their stationary distribution.
+  int n_dims = state->n_dims;
+  int n_levels = arch->n_levels;
+  int n_per_level = arch->n_per_level;
+  int symmetry = arch->symmetry;
+  long updates = state->updates; // so far ...
+  double* xavg;
+  if(n_per_level == 1){ // standard 1-body pi^(1/T) heating.
+    xavg = sum_arrays(n_dims, state->t_Lxsums[0], state->t_Rxsums[0]);
+    xavg = mult_array_by_scalar(0.5/updates, n_dims, xavg);
+    printf("# 1body: xavg[0]: %10.8g \n", xavg[0]);
+  }else if(n_per_level == 2){ // 2-body
+    if(symmetry == 0){ // asymmetric
+      xavg = (double*)calloc(n_dims, sizeof(double));
+      for(int i=0; i<n_levels; i++){
+        xavg = add_array_to_array(n_dims, xavg, state->t_Lxsums[i]);
+      }
+      xavg = mult_array_by_scalar(1.0/(n_levels * updates), n_dims, xavg);
+      printf("# 2bodyA: xavg[0]: %10.8g \n", xavg[0]);
+    }else if(symmetry == 1){ // symmetric
+      xavg = sum_arrays(n_dims, state->t_Lxsums[0], state->t_Rxsums[n_levels-1]);
+      xavg = mult_array_by_scalar(0.5/updates, n_dims, xavg);
+      printf("# 2bodyB: xavg[0]: %10.8g \n", xavg[0]);
+    }
   }
-  return dsq;
+  return xavg;
 }
 
-
-
-// the end
+// ****************  the end  ***********************

@@ -1,5 +1,6 @@
 typedef struct{
   int n_dims;
+  int type; // 0: gaussian, 1: 'cauchy'
   double* position;
   double width;
   double height;
@@ -8,13 +9,18 @@ typedef struct{
 
 
 typedef struct{
+  int n_dims;
   int n_peaks;
   peak** peaks;
-  long pi_evaluation_count;
+  //  long pi_evaluation_count;
+  double* mean_x;
 }target;
 
 
 //  target  function declarations
+target* set_up_target_from_argv(char** argv, int* i);
+target* set_up_target_from_peaks(int n_peaks, peak** the_peaks);
 target* set_up_target(int n_dims, int n_peaks, double spacing, double width, double height_ratio, double shape_param);
-void print_target_info(target* the_target); // not implemented.
-double pi(target* the_target, double* x);
+
+void print_target_info(const target* const the_target); // not implemented.
+double pi(const target* const the_target, const double* const x);
