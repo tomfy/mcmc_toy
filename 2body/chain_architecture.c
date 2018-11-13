@@ -15,10 +15,10 @@ chain_architecture* set_up_chain_architecture( int n_levels, int n_per_level, in
   chain_arch->n_per_level = n_per_level;
   chain_arch->n_levels = n_levels;
   chain_arch->two_body_interpolation_power = two_body_interpolation_power; //
-  chain_arch->inverse_Temperatures = (double*)malloc(n_levels*sizeof(double));
+  chain_arch->inverse_Temperatures = (double*)calloc(n_levels, sizeof(double));
   chain_arch->Lprop_widths = (double*)malloc(n_levels*sizeof(double));
   chain_arch->Rprop_widths = (double*)malloc(n_levels*sizeof(double));
-  chain_arch->kernel_widths = (double*)malloc(n_levels*sizeof(double));
+  chain_arch->kernel_widths = (double*)calloc(n_levels, sizeof(double));
 
   if(n_per_level == 1){ // standard mcmcmc.
     chain_arch->inverse_Temperatures[0] = 1.0;
@@ -33,7 +33,7 @@ chain_architecture* set_up_chain_architecture( int n_levels, int n_per_level, in
       chain_arch->Rprop_widths[i] = chain_arch->Rprop_widths[0] / sqrt(chain_arch->inverse_Temperatures[i]);
       //  printf("in suca: %i  %20.12g \n", i, chain_arch->Lprop_widths[i]);
     }
-  }else if(n_per_level == 2){ // ((1-e)*pix + e*piy)*K 
+  }else if(n_per_level == 2){ 
     if(chain_arch->symmetry == 1){
       chain_arch->Lprop_widths[0] = min_prop_w;
       chain_arch->Rprop_widths[n_levels-1] = min_prop_w;
@@ -75,7 +75,8 @@ void print_chain_architecture_info(const chain_architecture* const arch){
   printf("# n_levels: %2i  n_per_level: %2i  symmetric?: %2i \n", arch->n_levels, arch->n_per_level, arch->symmetry);
   printf("#     Tinv     Lpropw     Rpropw    Kwidth \n");
   for(int i=0; i<arch->n_levels; i++){
-    printf("# %8.6g   %8.5g   %8.5g  %8.6g \n", arch->inverse_Temperatures[i], arch->Lprop_widths[i], arch->Rprop_widths[i], arch->kernel_widths[i]);
+    printf("# %8.6g  %8.5g  %8.6g  %8.5g   ",  arch->inverse_Temperatures[i], 
+           arch->Lprop_widths[i], arch->Rprop_widths[i], arch->kernel_widths[i]);
   }
 }
 
