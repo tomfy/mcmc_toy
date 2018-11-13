@@ -94,6 +94,25 @@ target* set_up_target(int n_dims, int n_peaks, double spacing, double width, dou
 }
 
 void print_target_info(const target* const the_target){
+  int n_peaks = the_target->n_peaks;
+    printf("# n dimensions: %3d,  n peaks: %3d \n", the_target->n_dims, n_peaks);
+  for(int ip = 0; ip < n_peaks; ip++){
+    print_peak_info(the_target->peaks[ip]);
+  }
+  printf("# target mean: ");
+  for(int id = 0; id < the_target->n_dims; id++){
+    printf("%8.5f ", the_target->mean_x[id]);
+  }printf("\n");
+}
+void print_peak_info(const peak* const a_peak){
+  int n_dims = a_peak->n_dims;
+  printf("# peak position:  ");
+  for(int id = 0; id < n_dims; id++){
+    printf("%8.5f ", a_peak->position[id]);
+  }printf("\n");
+  printf("#    width: %8.5f \n", a_peak->width);
+  printf("#    height: %8.5f \n", a_peak->height);
+  printf("#    shape: %8.5f \n", a_peak->shape);
 }
 
 // the density to be sampled:
@@ -107,14 +126,13 @@ double pi(const target* const the_target, const double* const x){
       double dx = (x[i] - a_peak->position[i])/a_peak->width;
       rsq += dx*dx;
     }
-    if(1){
-      peak_result = exp(-0.5*rsq);
+    if(1){ // gaussian peak
+      peak_result = a_peak->height * exp(-0.5*rsq);
     }else{     
-      peak_result = pow((1.0 + rsq), -1.0*a_peak->shape); // -0.5*(n_dims + 1));
+      peak_result = a_peak->height * pow((1.0 + rsq), -1.0*a_peak->shape); // -0.5*(n_dims + 1));
     }
-    result += a_peak->height * peak_result;
+    result += peak_result;
   }
-  //  the_target->
   pi_evaluation_count++;
   return result;
 }

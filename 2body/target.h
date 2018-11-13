@@ -22,5 +22,6 @@ target* set_up_target_from_argv(char** argv, int* i);
 target* set_up_target_from_peaks(int n_peaks, peak** the_peaks);
 target* set_up_target(int n_dims, int n_peaks, double spacing, double width, double height_ratio, double shape_param);
 
-void print_target_info(const target* const the_target); // not implemented.
+void print_target_info(const target* const the_target); // 
+void print_peak_info(const peak* const a_peak); //
 double pi(const target* const the_target, const double* const x);
