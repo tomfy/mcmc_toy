@@ -3,7 +3,7 @@ use strict;
 use Getopt::Long;
 use Statistics::Basic qw(:all);
 
-my $n_updates = 10000;
+my $n_updates = 1000000000; # big, so max_pi_evals will determine stopping point.
 my $n_dimensions = 2;
 
 my $n_peaks = 2;
@@ -28,6 +28,7 @@ my $interpolation_power = 1;
 my $n_per_level = 2;
 my $symmetry = 1;
 my $burn_in = -0.1;
+my $max_pi_evals = 100000;
 my $n_runs = 10;
 
 my $verbose = 0;
@@ -43,21 +44,26 @@ GetOptions(
            'peak_heights=s' => \$peak_heights,
            'peak_shape=f' => \$peak_shape_param,
 
+           # chain architecture params
            'levels=i' => \$levels,
-           'Thot_range=f' => \$Thot_range,
-           'kernel_scale=f' => \$kernel_scale,
-
-           'proposal_width=f' => \$proposal_width_factor,
-           'seed=i' => \$rng_seed,
-
-           'burn_in=f' => \$burn_in,
-           'thin=i' => \$n_thin,
-           'output_order=s' => \$output_order,
-           'interpolation_power=s' => \$interpolation_power, # 'geom' is synonym for 0, 'lin' is synonym for 1;
-
            'n_per_level=i' => \$n_per_level,
            'symmetry=i' => \$symmetry,
+           'Thot_range=s' => \$Thot_range,
+           'kernel_scale=f' => \$kernel_scale,
+           'interpolation_power=s' => \$interpolation_power, # 'geom' is synonym for 0, 'lin' is synonym for 1;
+           'proposal_width_factor=f' => \$proposal_width_factor,
+   
+
+           'seed=i' => \$rng_seed,
+           'burn_in=f' => \$burn_in,
+           'thin=i' => \$n_thin,
+           'max_pi_evals=i' => \$max_pi_evals,
            'runs=i' => \$n_runs,
+
+           'output_order=s' => \$output_order,
+         
+
+       
            'verbose!' => \$verbose,
           );
 my $peak_type = '0';
@@ -75,14 +81,24 @@ for (my $i = 0; $i < $n_peaks; $i++) {
    $x += $peak_separation;
  #  $height *= $peak_height_ratio;
 }
+my @Thots = ();
+my @Thot_range = split(',', $Thot_range);
+if(scalar @Thot_range == 1){
+@Thots = @Thot_range;
+}elsif(scalar @Thot_range == 2){
+for (my $Thot = $Thot_range[0]; $Thot <= $Thot_range[1] * sqrt($Thot_multiplier); $Thot *= $Thot_multiplier) {
+   push @Thots, $Thot;
+}}
 # print("$target_string \n");
 my ($Thot_min, $Thot_max) = split(',', $Thot_range);
-for (my $Thot = $Thot_min; $Thot <= $Thot_max * $Thot_multiplier; $Thot *= $Thot_multiplier) {
-   my $arch_string = "  $levels $n_per_level $symmetry $Thot $kernel_scale $proposal_width_factor $interpolation_power  ";
+
+#for (my $Thot = $Thot_min; $Thot <= $Thot_max * $Thot_multiplier; $Thot *= $Thot_multiplier) {
+for my $Thot (@Thots){ 
+  my $arch_string = "  $levels $n_per_level $symmetry $Thot $kernel_scale $proposal_width_factor $interpolation_power  ";
 
    my $command = "~/mcmc_toy/2body/mcmc2body  $target_string   $arch_string  ";
    # $command .= "$n_peaks $peak_separation $peak_width $peak_height_ratio $peak_shape_param  ";
-   $command .= "$rng_seed $burn_in $n_updates $n_runs  $n_thin ";
+   $command .= "$rng_seed $burn_in $n_updates $max_pi_evals $n_runs  $n_thin ";
    my $order = "T";
    if ($output_order =~ /walker/) {
       $order = "walker";
@@ -137,7 +153,6 @@ for (my $Thot = $Thot_min; $Thot <= $Thot_max * $Thot_multiplier; $Thot *= $Thot
             } else {
                print "$a_line \n";
             }
-
          }
       }
       my $mean = mean(@pooled_abs_errors);
@@ -150,6 +165,5 @@ for (my $Thot = $Thot_min; $Thot <= $Thot_max * $Thot_multiplier; $Thot *= $Thot
          printf("%3i  %8.5f +- %7.5f  ", $i, $mean, $stddev/sqrt(scalar @{$abs_errors[$i]}));
       }
       printf("\n");
-
    }
 }
