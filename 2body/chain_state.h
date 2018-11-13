@@ -21,6 +21,10 @@ typedef struct{
   long updates; // the number of updates so far.
   double** t_Lxsums;
   double** t_Rxsums;
+  vector* all_coldx0s;
+  vector* all_coldx1s;
+  vector** w_coldx0s;
+  vector** w_coldx1s; 
   int* w_near_peak; // index of nearest peak
   int* w_transition_counts; // counts each walker's moves from one peak to the other.
   int* t_Lnear_peak;
@@ -43,6 +47,7 @@ typedef struct{
 //  chain_state  function declarations
 chain_state* set_up_chain_state(const target* const the_target, const chain_architecture* const arch, double init_width);
 void reset_chain_state(chain_state* state); // reset the cumulative variables to initial values
+void free_chain_state(chain_state* state);
 
 int check_state_consistency(const target* const the_target, const chain_architecture* const arch, const chain_state* const state);
 void print_states_walker_order(const chain_state* const state); 

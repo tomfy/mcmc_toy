@@ -34,8 +34,14 @@ chain_state* set_up_chain_state(const target* const the_target, const chain_arch
   state->t_dsqrs = (double*)malloc(n_levels*sizeof(double));
 
   state->updates = 0;
- state->t_Lxsums = (double**)malloc(n_levels*sizeof(double*));
- state->t_Rxsums = (double**)malloc(n_levels*sizeof(double*));
+  
+  long init_size = 10000;
+  state->all_coldx0s = new_vector(init_size);
+  state->all_coldx1s = new_vector(init_size);
+  state->w_coldx0s = (vector**)malloc(n_walkers*sizeof(vector*));
+  state->w_coldx1s = (vector**)malloc(n_walkers*sizeof(vector*));
+  state->t_Lxsums = (double**)malloc(n_levels*sizeof(double*));
+  state->t_Rxsums = (double**)malloc(n_levels*sizeof(double*));
   state->w_near_peak = (int*)calloc(n_walkers, sizeof(int)); 
   state->w_transition_counts = (int*)calloc(n_walkers, sizeof(int));
   state->t_Lnear_peak = (int*)calloc(n_levels, sizeof(int)); 
@@ -70,6 +76,9 @@ chain_state* set_up_chain_state(const target* const the_target, const chain_arch
       exit(0);
     }
     
+    state->w_coldx0s[i] = new_vector(init_size);
+    state->w_coldx1s[i] = new_vector(init_size);
+
   } // end loop through walkers
   for(int it = 0; it < n_levels; it++){
     int iwx = state->t_Lws[it];
@@ -130,6 +139,45 @@ void reset_chain_state(chain_state* state){ // reset the cumulative variables to
   }
 
 }
+
+void free_chain_state(chain_state* state){
+  int n_dims = state->n_dims;
+  int n_levels = state->n_levels;
+  for(int iw = 0; iw < 2*n_levels; iw++){
+    free(state->w_xs[iw]);
+    free_vector(state->w_coldx0s[iw]);
+    free_vector(state->w_coldx1s[iw]);
+  }
+  free_vector(state->all_coldx0s);
+  free_vector(state->all_coldx1s);
+  free(state->w_xs);
+  free(state->w_pis);
+  free(state->t_Lws);
+  free(state->t_Rws);
+  free(state->t_PIs);
+  free(state->t_dsqrs);
+
+  for(int it = 0; it < n_levels; it++){
+    free(state->t_Lxsums[it]);
+    free(state->t_Rxsums[it]);
+  }
+
+  free(state->w_near_peak);
+  free(state->w_transition_counts);
+  free(state->t_Lnear_peak);
+  free(state->t_Ltransition_counts);
+  free(state->t_Rnear_peak);
+  free(state->t_Rtransition_counts);
+  free(state->w_accepts); // counts the accepted X-changing moves for each walker
+  free(state->t_accepts); // count the accepted X-changing moves for each T-level
+  free(state->t_Laccepts);
+  free(state->t_Raccepts);
+  free(state->t_Tswap_accepts); // counts accepted T-swaps between T-levels i, i+1
+  free(state->t_Tswap_Laccepts);
+  free(state->t_Tswap_Raccepts);
+  free(state->t_LRswap_accepts); // counts accepted LR-swaps for each T-level. 
+}
+
 
 void print_states_walker_order(const chain_state* const state){
   int n_w = 2*state->n_levels;
@@ -272,9 +320,19 @@ void update_x(const target* const the_target, const chain_architecture* const ar
   double pi_prop_x = pi(the_target, prop_x);
   if( (pi_prop_x > pi_x)  ||  (gsl_rng_uniform(g_rng)  <  pow(pi_prop_x/pi_x, Tinverse)) ){ // Accept proposal
     {
-   int old_near_peak = (state->w_xs[iw][0] <= 0)? -1 : 1;
+      int old_near_peak = (state->w_xs[iw][0] <= 0)? -1 : 1;
       int new_near_peak = (prop_x[0] <= 0)? -1 : 1;
-      if(new_near_peak != old_near_peak){ state->t_Ltransition_counts[it]++; }
+      if(new_near_peak != old_near_peak){ 
+        if(state->w_LRs[iw] == 0){ // L
+          state->t_Ltransition_counts[it]++; 
+        }else{ // R
+          state->t_Rtransition_counts[it]++; 
+        }
+      }
+      if ((state->w_ts[iw] == 0 /* cold*/ ) && (state->w_near_peak[iw] != new_near_peak)){
+        state->w_transition_counts[iw]++;
+        state->w_near_peak[iw] = new_near_peak;
+      }      
     }
     state->w_pis[iw] = pi_prop_x;
     free(state->w_xs[iw]);  
@@ -285,11 +343,6 @@ void update_x(const target* const the_target, const chain_architecture* const ar
       state->t_Laccepts[state->w_ts[iw]]++;
     }else{
       state->t_Raccepts[state->w_ts[iw]]++;
-    }
-    int new_near_peak = (prop_x[0] < 0)? -1 : 1;
-    if ((state->w_ts[iw] == 0 /* cold*/ ) && (state->w_near_peak[iw] != new_near_peak)){
-      state->w_transition_counts[iw]++;
-      state->w_near_peak[iw] = new_near_peak;
     }
   }else{ // Reject proposal
     free(prop_x);
@@ -392,39 +445,78 @@ void update_x_2b(const target* const the_target, const chain_architecture* const
   // update y
   {  
     pi_x = state->w_pis[iw_x]; // x and pi_x may have changed above, so get the up-to-date value!
-    double* propy = (double*)malloc(state->n_dims*sizeof(double));
-    for(int i = 0; i < state->n_dims; i++){ // propose a new position
-      propy[i] = state->w_xs[iw_y][i] + gsl_ran_gaussian(g_rng, Rprop_w); // normal (aka gaussian) proposal
+    if(arch->symmetry == 0){
+      int n_accepts = 0;
+      for(int itry = 0; itry < 6; itry++){ // 
+      double* propy = (double*)malloc(state->n_dims*sizeof(double));
+      for(int i = 0; i < state->n_dims; i++){ // propose a new position
+        propy[i] = state->w_xs[iw_y][i] + gsl_ran_gaussian(g_rng, Rprop_w); // normal (aka gaussian) proposal
+      }
+      double pi_propy = -1.0; // (arch->symmetry == 1)? pi(the_target, propy) : -1.0; // for asymmetric, don't need to calculate pi(y) here (do later if accepted)
+
+      double PI_x_y = state->t_PIs[it];
+      double Dsqr_prop = Dsquared(state->n_dims, state->w_xs[iw_x], propy);
+      double PI_x_propy = PI(pi_x, pi_propy, it, state->n_levels, Kernel(Dsqr_prop, Lsqr), arch); 
+      if( (PI_x_propy > PI_x_y)  ||  (gsl_rng_uniform(g_rng)*PI_x_y <  PI_x_propy) ){ // Accept proposal
+
+        int old_near_peak = (state->w_xs[iw_y][0] <= 0)? -1 : 1;
+        int new_near_peak = (propy[0] <= 0)? -1 : 1;
+        if(new_near_peak != old_near_peak){ state->t_Rtransition_counts[it]++; }
+
+      
+        free(state->w_xs[iw_y]);  
+        state->w_xs[iw_y] = propy;
+
+        state->w_accepts[iw_y]++;
+        //   state->t_accepts[it]++;
+        state->t_Raccepts[it]++;
+
+        state->t_dsqrs[it] = Dsqr_prop;
+        state->t_PIs[it] = PI_x_propy;
+        n_accepts++;
+      }else{ // Reject proposal
+        free(propy);
+      }
+      if(n_accepts > 0){
+          state->w_pis[iw_y] = pi(the_target, propy); // if asymmetric, didn't get pi(y) before, do now.
+      }
+      }
+    }else{
+      double* propy = (double*)malloc(state->n_dims*sizeof(double));
+      for(int i = 0; i < state->n_dims; i++){ // propose a new position
+        propy[i] = state->w_xs[iw_y][i] + gsl_ran_gaussian(g_rng, Rprop_w); // normal (aka gaussian) proposal
+      }
+      double pi_propy = (arch->symmetry == 1)? pi(the_target, propy) : -1.0; // for asymmetric, don't need to calculate pi(y) here (do later if accepted)
+
+      double PI_x_y = state->t_PIs[it];
+      double Dsqr_prop = Dsquared(state->n_dims, state->w_xs[iw_x], propy);
+      double PI_x_propy = PI(pi_x, pi_propy, it, state->n_levels, Kernel(Dsqr_prop, Lsqr), arch); 
+      if( (PI_x_propy > PI_x_y)  ||  (gsl_rng_uniform(g_rng)*PI_x_y <  PI_x_propy) ){ // Accept proposal
+
+        int old_near_peak = (state->w_xs[iw_y][0] <= 0)? -1 : 1;
+        int new_near_peak = (propy[0] <= 0)? -1 : 1;
+        if(new_near_peak != old_near_peak){ state->t_Rtransition_counts[it]++; }
+
+        state->w_pis[iw_y] = (arch->symmetry)? pi_propy : pi(the_target, propy); // if asymmetric, didn't get pi(y) before, do now.
+        free(state->w_xs[iw_y]);  
+        state->w_xs[iw_y] = propy;
+
+        state->w_accepts[iw_y]++;
+        //   state->t_accepts[it]++;
+        state->t_Raccepts[it]++;
+
+        state->t_dsqrs[it] = Dsqr_prop;
+        state->t_PIs[it] = PI_x_propy;
+      }else{ // Reject proposal
+        free(propy);
+      }
     }
-    double pi_propy = (arch->symmetry == 1)? pi(the_target, propy) : 1.0; // for asymmetric, don't need to calculate pi(y) here (do later if accepted)
-
-    double PI_x_y = state->t_PIs[it];
-    double Dsqr_prop = Dsquared(state->n_dims, state->w_xs[iw_x], propy);
-    double PI_x_propy = PI(pi_x, pi_propy, it, state->n_levels, Kernel(Dsqr_prop, Lsqr), arch); 
-    if( (PI_x_propy > PI_x_y)  ||  (gsl_rng_uniform(g_rng)*PI_x_y <  PI_x_propy) ){ // Accept proposal
-
-      int old_near_peak = (state->w_xs[iw_y][0] <= 0)? -1 : 1;
-      int new_near_peak = (propy[0] <= 0)? -1 : 1;
-      if(new_near_peak != old_near_peak){ state->t_Rtransition_counts[it]++; }
-
-      state->w_pis[iw_y] = (arch->symmetry)? pi_propy : pi(the_target, propy); // if asymmetric, didn't get pi(y) before, do now.
-      free(state->w_xs[iw_y]);  
-      state->w_xs[iw_y] = propy;
-
-      state->w_accepts[iw_y]++;
-      //   state->t_accepts[it]++;
-      state->t_Raccepts[it]++;
-
-      state->t_dsqrs[it] = Dsqr_prop;
-      state->t_PIs[it] = PI_x_propy;
-    }else{ // Reject proposal
-      free(propy);
-    }
+   
   }
 }
 
 void cold_transition_observe_and_count_sym(chain_state* state){
-  // a walker's nearest peak is only reset when the walker is cold (i.e. x, it=0, or y, it=nTs-1
+  // a walker's nearest peak is only reset when the walker is cold (i.e. x, it=0, or y, it=n_levels-1
   // a transition occurs if previous near peak (when walker was cold) is different from latest near peak.
   int it = 0;
   // L (i.e. x)
@@ -449,13 +541,13 @@ void cold_transition_observe_and_count_asym(chain_state* state){
   // a walker's nearest peak is only reset when the walker is cold (i.e. x, it=0, or y, it=nTs-1
   // a transition occurs if previous near peak (when walker was cold) is different from latest near peak.
   for(int it = 0; it < state->n_levels; it++){
-  // L (i.e. x)
-  int iw = state->t_Lws[it];
-  int new_near_peak = (state->w_xs[iw][0] < 0)? -1 : 1;
-  if(new_near_peak != state->w_near_peak[iw]){
-    state->w_transition_counts[iw]++;
-    state->w_near_peak[iw] = new_near_peak;
-  }
+    // L (i.e. x)
+    int iw = state->t_Lws[it];
+    int new_near_peak = (state->w_xs[iw][0] < 0)? -1 : 1;
+    if(new_near_peak != state->w_near_peak[iw]){
+      state->w_transition_counts[iw]++;
+      state->w_near_peak[iw] = new_near_peak;
+    }
   }
 
 }
@@ -541,8 +633,8 @@ void T_swap_2b_B(const chain_architecture* arch, chain_state* state){ // swap xs
     //  double Tc_inverse = inverse_Temperatures[i-1];  // 1/T for the colder of two walkers
     //  double Th_inverse = inverse_Temperatures[i];  // 1/T for the hotter of the two walkers
 
-      double Lsqr_cold = arch->kernel_widths[i-1] * arch->kernel_widths[i-1];
-      double Lsqr_hot = arch->kernel_widths[i] * arch->kernel_widths[i];
+    double Lsqr_cold = arch->kernel_widths[i-1] * arch->kernel_widths[i-1];
+    double Lsqr_hot = arch->kernel_widths[i] * arch->kernel_widths[i];
 
     {  //  first the 'left' set of walkers, i.e. x's:
       int iw_xhot = state->t_Lws[i]; // index of walker with ith temperature
@@ -566,7 +658,7 @@ void T_swap_2b_B(const chain_architecture* arch, chain_state* state){ // swap xs
       /*    Kernel(Dsquared(state->n_dims, state->w_xs[iw_xcold], state->w_xs[iw_ycold]), Lsq), */
       /*    Tc_inverse); */
 
-   // proposed hotter state, with xcold, yhot, i.e x swapped
+      // proposed hotter state, with xcold, yhot, i.e x swapped
       double dsqr_prop_hot = Dsquared(state->n_dims, state->w_xs[iw_xcold], state->w_xs[iw_yhot]);
       double PI_prop_hot = PI(pi_xcold, pi_yhot, i, state->n_levels,  
                               Kernel(dsqr_prop_hot, Lsqr_hot),
@@ -667,15 +759,37 @@ void LR_swap(const chain_architecture* arch, chain_state* state){
   }
 }
 
-
 void step_1b(const target* const target, const chain_architecture* const arch, chain_state* state){    
   for(int iw = 0; iw < state->n_walkers; iw++){ // update positions of walkers
     update_x(target, arch, state, iw); 
   }
   T_swap(state, arch->inverse_Temperatures);
   state->updates++;
-}
+  if(state->updates % n_thin == 0){ // store x0 and x1 of the 'cold' walkers 
+    int iw_Lcold = state->t_Lws[0]; // the walker at L, T=1 node.
+    int iw_Rcold = state->t_Rws[0]; // the walker at R, T=1 node.
 
+    //   printf("push cold Lx0 \n");
+    push(state->w_coldx0s[iw_Lcold], state->w_xs[iw_Lcold][0]);
+    //  printf("push cold Rx0 \n");
+    push(state->w_coldx0s[iw_Rcold], state->w_xs[iw_Rcold][0]);
+    // printf("push cold Lx1 \n");
+    push(state->w_coldx1s[iw_Lcold], state->w_xs[iw_Lcold][1]);
+    // printf("push cold Rx1 \n");
+    push(state->w_coldx1s[iw_Rcold], state->w_xs[iw_Rcold][1]);
+
+    // printf("push cold Lx0 all \n");
+    push(state->all_coldx0s, state->w_xs[iw_Lcold][0]);
+    // printf("push cold Rx0 all \n");
+    push(state->all_coldx0s, state->w_xs[iw_Rcold][0]);
+    // printf("push cold Lx1 all \n");
+    push(state->all_coldx1s, state->w_xs[iw_Lcold][1]);
+    // printf("push cold Rx1 all \n");
+    //  fflush(stdout);
+    push(state->all_coldx1s, state->w_xs[iw_Rcold][1]);
+    //   fflush(stdout);
+  }
+}
 
 void step_2b(const target* const target, const chain_architecture* const arch, chain_state* state){    
   for(int level = 0; level < arch->n_levels; level++){
@@ -687,6 +801,31 @@ void step_2b(const target* const target, const chain_architecture* const arch, c
     LR_swap(arch, state);
   }
   state->updates++;
+
+  if(arch->symmetry == 1){ // Symmetric
+    if(state->updates % n_thin == 0){ // store x0 and x1 of the 'cold' walkers 
+      int iw_Lcold = state->t_Lws[0]; // the walker at L, T=1 node.
+      int iw_Rcold = state->t_Rws[arch->n_levels-1]; // the walker at R, T=1 node.
+
+      push(state->w_coldx0s[iw_Lcold], state->w_xs[iw_Lcold][0]);
+      push(state->w_coldx0s[iw_Rcold], state->w_xs[iw_Rcold][0]);
+      push(state->w_coldx1s[iw_Lcold], state->w_xs[iw_Lcold][1]);
+      push(state->w_coldx1s[iw_Rcold], state->w_xs[iw_Rcold][1]);
+
+      push(state->all_coldx0s, state->w_xs[iw_Lcold][0]);
+      push(state->all_coldx0s, state->w_xs[iw_Rcold][0]);
+      push(state->all_coldx1s, state->w_xs[iw_Lcold][1]);
+      push(state->all_coldx1s, state->w_xs[iw_Rcold][1]);
+    }
+  }else{ // Asymmetric
+    for(int it = 0; it < arch->n_levels; it++){
+      int iw = state->t_Lws[it];
+      push(state->w_coldx0s[iw], state->w_xs[iw][0]);
+      push(state->w_coldx1s[iw], state->w_xs[iw][1]);
+      push(state->all_coldx0s, state->w_xs[iw][0]);
+      push(state->all_coldx1s, state->w_xs[iw][1]); 
+    }
+  }
 }
 
 void accumulate_x_sums(chain_state* state){ 
