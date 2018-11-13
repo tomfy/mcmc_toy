@@ -16,4 +16,7 @@ util.o: util.c util.h
 mcmc2body.o: mcmc2body.c mcmc2body.h target.h chain_architecture.h chain_state.h globals.h util.o util.h 
 	gcc -std=c99 -c mcmc2body.c -O3 
 
+clean:
+	rm mcmc2body  mcmc2body.o target.o chain_architecture.o chain_state.o util.o
+
 
