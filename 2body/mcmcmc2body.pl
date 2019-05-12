@@ -8,7 +8,7 @@ my $n_dimensions = 2;
 
 my $n_peaks = 2;
 my $peak_separation = 2.0;
-my $peak_widths = '0.25,0.25';
+my $peak_widths = '0.25,0.25'; # e.g. '0.1, 0.2; 0.1, 0.25' : first peak: x[0] width: 0.1, x[1] width: 0.2, 2nd peak: x[0] width 0.1, x[1] width: 0.25. 
 my $peak_heights = '1.0,0.25';
 my $peak_shape_param = 1.0;
 
@@ -29,7 +29,7 @@ my $n_per_level = 2;
 my $symmetry = 1;
 my $burn_in = -0.1;
 my $max_pi_evals = 100000;
-my $n_runs = 10;
+my $n_runs = 1;
 
 my $verbose = 0;
 my $Thot_multiplier = 2**0.25;
@@ -52,7 +52,6 @@ GetOptions(
            'kernel_scale=f' => \$kernel_scale,
            'interpolation_power=s' => \$interpolation_power, # 'geom' is synonym for 0, 'lin' is synonym for 1;
            'proposal_width_factor=f' => \$proposal_width_factor,
-   
 
            'seed=i' => \$rng_seed,
            'burn_in=f' => \$burn_in,
@@ -61,23 +60,23 @@ GetOptions(
            'runs=i' => \$n_runs,
 
            'output_order=s' => \$output_order,
-         
 
-       
            'verbose!' => \$verbose,
           );
 my $peak_type = '0';
 my $x = -0.5*$peak_separation;
 my $height = 1.0;
-my @widths = split(",", $peak_widths);
+$peak_widths =~ s/\s+//g; 
+my @peak_width_strings = split(";", $peak_widths);
 my @heights = split(",", $peak_heights);
-print "widths: ", join("; ", @widths), "\n";
+print "widths: ", join("; ", @peak_width_strings), "\n";
 print "heights: ", join("; ", @heights), "\n";
 
 my $target_string = "$n_dimensions $n_peaks  ";
 for (my $i = 0; $i < $n_peaks; $i++) {
    $target_string .= "$peak_type $x," . join(",", ((0) x ($n_dimensions-1))) . "  ";
-   $target_string .= $heights[$i] . " " .  $widths[$i] . " $peak_shape_param  ";
+   my @ws = split(",", $peak_width_strings[$i]);
+   $target_string .= $heights[$i] . " " .  join(" ", @ws) . " $peak_shape_param  ";
    $x += $peak_separation;
  #  $height *= $peak_height_ratio;
 }
@@ -93,7 +92,7 @@ for (my $Thot = $Thot_range[0]; $Thot <= $Thot_range[1] * sqrt($Thot_multiplier)
 my ($Thot_min, $Thot_max) = split(',', $Thot_range);
 
 #for (my $Thot = $Thot_min; $Thot <= $Thot_max * $Thot_multiplier; $Thot *= $Thot_multiplier) {
-for my $Thot (@Thots){ 
+for my $Thot (@Thots){
   my $arch_string = "  $levels $n_per_level $symmetry $Thot $kernel_scale $proposal_width_factor $interpolation_power  ";
 
    my $command = "~/mcmc_toy/2body/mcmc2body  $target_string   $arch_string  ";

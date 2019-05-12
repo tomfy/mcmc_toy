@@ -40,11 +40,18 @@ target* set_up_target_from_argv(char** argv, int* i){
     }
     a_peak->position = position;
     a_peak->height = atof(argv[i_arg++]);
-    a_peak->width = atof(argv[i_arg++]);
+
+    double* widths = (double*)malloc(n_dims*sizeof(double));
+    double widths_product = 1.0;
+    for(int j = 0; j < n_dims; j++){
+      widths[j] = atof(argv[i_arg++]);
+      widths_product *= widths[j];
+    }
+    a_peak->width = widths;
     a_peak->shape = atof(argv[i_arg++]);
     //    printf("   h, w, s: %10.6g %10.6g %10.6g \n", a_peak->height, a_peak->width, a_peak->shape);
     the_target->peaks[i_peak] = a_peak;
-    double weight = a_peak->height * pow(a_peak->width, n_dims);
+    double weight = a_peak->height * widths_product; // pow(a_peak->width, n_dims);
     for(int i = 0; i < n_dims; i++){
       x_wsum[i] += weight * position[i];
     }
@@ -83,7 +90,9 @@ target* set_up_target(int n_dims, int n_peaks, double spacing, double width, dou
     }
     a_peak->n_dims = n_dims;
     a_peak->position = peak_position;
-    a_peak->width = width;
+    for(int j=0; j<n_dims; j++){
+      a_peak->width[j] = width;
+    }
     a_peak->height = peak_height;
     a_peak->shape = shape_param;
     the_target->peaks[i] = a_peak; 
@@ -110,29 +119,49 @@ void print_peak_info(const peak* const a_peak){
   for(int id = 0; id < n_dims; id++){
     printf("%8.5f ", a_peak->position[id]);
   }printf("\n");
-  printf("#    width: %8.5f \n", a_peak->width);
+  printf("#    width:  ");
+ for(int id = 0; id < n_dims; id++){
+  printf("%8.5f ", a_peak->width[id]);
+ }printf("\n");
   printf("#    height: %8.5f \n", a_peak->height);
   printf("#    shape: %8.5f \n", a_peak->shape);
 }
 
+double min_peak_width(target* the_target){
+  int n_peaks = the_target->n_peaks;
+  int n_dims = the_target->n_dims;
+  double min_width = the_target->peaks[0]->width[0];
+  for(int i = 0; i < n_peaks; i++){
+    for(int j = 0; j < n_dims; j++){
+      double w = the_target->peaks[i]->width[j];
+      min_width = (w < min_width)? w : min_width;
+    }
+  }
+  return min_width;
+}
+
+
 // the density to be sampled:
-double pi(const target* const the_target, const double* const x){
+double pi(const target* const the_target, const double* const x, int* which_peak){
   double result = 0.0;
+  double max_peak_value = -1;
   for(int k = 0; k < the_target->n_peaks; k++){   
-    double peak_result;
+    double peak_value;
     peak* a_peak = the_target->peaks[k];
     double rsq = 0;
     for(int i = 0; i < a_peak->n_dims; i++){
-      double dx = (x[i] - a_peak->position[i])/a_peak->width;
+      double dx = (x[i] - a_peak->position[i])/a_peak->width[i];
       rsq += dx*dx;
     }
     if(1){ // gaussian peak
-      peak_result = a_peak->height * exp(-0.5*rsq);
+      peak_value = a_peak->height * exp(-0.5*rsq);
     }else{     
-      peak_result = a_peak->height * pow((1.0 + rsq), -1.0*a_peak->shape); // -0.5*(n_dims + 1));
+      peak_value = a_peak->height * pow((1.0 + rsq), -1.0*a_peak->shape); // -0.5*(n_dims + 1));
     }
-    result += peak_result;
+    if(peak_value > max_peak_value){ max_peak_value = peak_value; *which_peak = k; }
+    result += peak_value;
   }
+  //  printf("# in pi. which_peak: %d \n", *which_peak);
   pi_evaluation_count++;
   return result;
 }

@@ -2,7 +2,7 @@ typedef struct{
   int n_dims;
   int type; // 0: gaussian, 1: 'cauchy'
   double* position;
-  double width;
+  double* width; // 
   double height;
   double shape; // shape param (bigger -> lighter tails)
 }peak;
@@ -24,4 +24,6 @@ target* set_up_target(int n_dims, int n_peaks, double spacing, double width, dou
 
 void print_target_info(const target* const the_target); // 
 void print_peak_info(const peak* const a_peak); //
-double pi(const target* const the_target, const double* const x);
+double min_peak_width(target* the_target);
+
+double pi(const target* const the_target, const double* const x, int* which_peak);

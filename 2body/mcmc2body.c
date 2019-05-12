@@ -77,7 +77,7 @@ int main(int argc, char* argv[]){
   printf("# output format %s \n", output_format);
   printf("# verbosity: %d \n", verbose);
 
-  double peak_width = fmin(the_target->peaks[0]->width, the_target->peaks[1]->width);
+  double peak_width = min_peak_width(the_target); // ->peaks[0]->width, the_target->peaks[1]->width);
   // int verbose = 0;
 
   // ***** Set up RNG *****
@@ -97,7 +97,7 @@ int main(int argc, char* argv[]){
   // loop over runs: 
   for(int i_run = 0; i_run < n_runs; i_run++){
     // ***** Setup initial states of walkers *********
-    double init_width = 2.0*peak_width;
+    double init_width = 0.1*peak_width;
     chain_state* the_chain_state = set_up_chain_state(the_target, the_arch, init_width);
 
     check_state_consistency(the_target, the_arch, the_chain_state);
@@ -107,7 +107,7 @@ int main(int argc, char* argv[]){
     // *************************************************************
     // ******************* Loop through updates ********************
     // *************************************************************
-    long next_summary = 100;
+    long next_summary = 10000;
     pi_evaluation_count = 0;
     long n_updates_done;
     if(n_per_level == 1){ // standard 1-body heating.
@@ -140,14 +140,14 @@ int main(int argc, char* argv[]){
         if(pi_evaluation_count >= next_summary){ // get KSD statistic, etc.
           vector* v = the_chain_state->all_coldx0s;
           qsort(v->elements, v->count, sizeof(double), compare_doubles);
-          printf("KSD: %4ld ", pi_evaluation_count);
+          printf("# KSD: %4ld ", pi_evaluation_count);
           double avg_KSD = 0.0;
           for(int iw = 0; iw < 2*the_chain_state->n_levels; iw++){
             vector* vw = the_chain_state->w_coldx0s[iw];
             qsort(vw->elements, vw->count, sizeof(double), compare_doubles);
             double KSD = Kolmogorov_Smirnov_D_statistic_2_sample(v->count, v->elements, vw->count, vw->elements);
             avg_KSD += KSD;
-            printf("%2d %5ld %6.4f  ", iw, vw->count, KSD); 
+            printf("# %2d %5ld %6.4f  ", iw, vw->count, KSD); 
           }
           printf(" %6.4f\n", avg_KSD/(2*the_chain_state->n_levels));
           next_summary = (long)(next_summary * 1.2);
@@ -303,5 +303,6 @@ double* est_mean_pi(chain_architecture* arch, chain_state* state){ // get the 'b
   printf("# estimated mean x[0]: %10.7g \n", xavg[0]);
   return xavg;
 }
+
 
 // ****************  the end  ***********************

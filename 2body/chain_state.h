@@ -25,12 +25,11 @@ typedef struct{
   vector* all_coldx1s;
   vector** w_coldx0s;
   vector** w_coldx1s; 
-  int* w_near_peak; // index of nearest peak
-  int* w_transition_counts; // counts each walker's moves from one peak to the other.
-  int* t_Lnear_peak;
-  int* t_Ltransition_counts;
-  int* t_Rnear_peak;
-  int* t_Rtransition_counts;
+  int* w_near_peak_cold; // index of 'nearest' peak when this walker was most recently 'cold'
+  int* w_cold_transition_counts; // counts each walker's moves from one peak to the another
+  int* w_near_peak;
+  int* t_L_transition_counts;
+  int* t_R_transition_counts;
 
   int* w_accepts; // counts the accepted X-changing moves for each walker
   int* t_accepts; // count the accepted X-changing moves for each T-level

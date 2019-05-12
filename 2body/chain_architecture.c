@@ -75,7 +75,7 @@ void print_chain_architecture_info(const chain_architecture* const arch){
   printf("# n_levels: %2i  n_per_level: %2i  symmetric?: %2i \n", arch->n_levels, arch->n_per_level, arch->symmetry);
   printf("#     Tinv     Lpropw     Rpropw    Kwidth \n");
   for(int i=0; i<arch->n_levels; i++){
-    printf("# %8.6g  %8.5g  %8.6g  %8.5g   ",  arch->inverse_Temperatures[i], 
+    printf("# %8.6g  %8.5g  %8.6g  %8.5g  \n",  arch->inverse_Temperatures[i], 
            arch->Lprop_widths[i], arch->Rprop_widths[i], arch->kernel_widths[i]);
   }
 }
@@ -93,6 +93,7 @@ double PI(double pix, double piy, int it, int n_Ts, double K, const chain_archit
       return pix*K;
     }else{
       int itop = n_Ts - 1;
+      double epsilon = (double)it/itop;
       if(it == itop){
         return piy*K;
       }else{
@@ -101,13 +102,19 @@ double PI(double pix, double piy, int it, int n_Ts, double K, const chain_archit
           return pixpiylc*K;
         }else if(arch->two_body_interpolation_power == 0){
           return pow(pix, (1.0 - 1.0*it/itop)) * pow(piy, 1.0*it/itop) * K;  // geometric interpolation (P -> 0 limit)
-        }else{
-          double power = arch->two_body_interpolation_power;
-          double result = pow( 
-                              (1.0 - 1.0*it/itop)*pow(pix,power)  +  (1.0*it/itop)*pow(piy, power)
-                              , (1.0/power) ) * K; // weighted power mean
-          //  printf("%g %g %g  %g\n", pix, piy, result, two_body_interpolation_power);
-          return result;
+        }else{ // p = 0 at ends, arch->two_body_interpolation_power in middle
+          if(0){
+            double factor = (epsilon <= 0.5)? epsilon : 1.0 - epsilon;
+            double power = arch->two_body_interpolation_power * factor;
+            double result = pow( 
+                                (1.0 - epsilon)*pow(pix,power)  +  (epsilon)*pow(piy, power)
+                                , (1.0/power) ) * K; // weighted power mean
+            //  printf("%g %g %g  %g\n", pix, piy, result, two_body_interpolation_power);
+            return result;
+          }else{ //
+            double result = pow(pix, 1.0 - epsilon) * pow(piy, 1.0 - epsilon) * K;
+            return result;
+          }
         }
       }
     }
