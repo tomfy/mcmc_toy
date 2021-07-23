@@ -91,7 +91,17 @@ int main(int argc, char* argv[]){
   // target* the_target = set_up_target(n_dims, n_peaks, 0.5*peak_separation, peak_width, height_ratio, shape_param);
 
   //********** Set up the chain architecture ****************
-  chain_architecture* the_arch = set_up_chain_architecture(n_levels, n_per_level, symmetry, Thot, proposal_width_factor*peak_width, proposal_width_factor*kernel_width, peak_width, kernel_width, interpolation_power);
+  double min_prop_width = proposal_width_factor*peak_width;
+  double max_prop_width = proposal_width_factor*kernel_width;
+  max_prop_width = min_prop_width;
+  double min_kernel_width = kernel_width; // peak_width;
+  double max_kernel_width = kernel_width;
+  chain_architecture* the_arch = set_up_chain_architecture(n_levels, n_per_level, symmetry, Thot, 
+                                                           min_prop_width, max_prop_width,
+                                                           // proposal_width_factor*peak_width, proposal_width_factor*kernel_width, 
+                                                           min_kernel_width, max_kernel_width,
+                                                           // peak_width, kernel_width, 
+                                                           interpolation_power);
   print_chain_architecture_info(the_arch);
 
   // loop over runs: 
@@ -221,7 +231,7 @@ int main(int argc, char* argv[]){
         printf("#   T-levels: %1i-%1i P_A L,R,both: %5.3f %5.3f %5.3f \n", it, it+1, 
                the_chain_state->t_Tswap_Laccepts[it]/(1.0*n_updates_done),
                the_chain_state->t_Tswap_Raccepts[it]/(1.0*n_updates_done),
-               the_chain_state->t_Tswap_accepts[it]/(2.0*n_updates_done)); 
+               the_chain_state->t_Tswap_accepts[it]/(1.0*n_updates_done)); 
       }
 
       printf("# LR-swap acceptance rates:\n");

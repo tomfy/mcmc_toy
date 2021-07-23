@@ -352,7 +352,7 @@ void update_x(const target* const the_target, const chain_architecture* const ar
   }
 }
 
-void T_swap(chain_state* state, double* inverse_Temperatures){
+void T_swap(chain_state* state, double* inverse_Temperatures){ // for standard pi**(1/T) 'heating'.
   for(int i=1; i<state->n_levels; i++){ // T-swapping among Ls
     double Tc_inverse = inverse_Temperatures[i-1];  // 1/T for the colder of two walkers
     double Th_inverse = inverse_Temperatures[i];  // 1/T for the hotter of the two walkers
@@ -374,7 +374,7 @@ void T_swap(chain_state* state, double* inverse_Temperatures){
         state->w_ts[iw_hot] = state->w_ts[iw_cold];
         state->w_ts[iw_cold] = tmp;
         //   printf("T-swap accepted (L). T-levels: %i %i \n", i-1, i);
-        state->t_Tswap_accepts[i-1]++; // indices used are 0 through n_levels-2
+        state->t_Tswap_Laccepts[i-1]++; // indices used are 0 through n_levels-2
       }
     }
     {  //  then the 'right' set of walkers:
@@ -395,7 +395,7 @@ void T_swap(chain_state* state, double* inverse_Temperatures){
         state->w_ts[iw_hot] = state->w_ts[iw_cold];
         state->w_ts[iw_cold] = tmp;
 
-        state->t_Tswap_accepts[i-1]++;
+        state->t_Tswap_Raccepts[i-1]++;
       }
     }
   }
@@ -415,9 +415,15 @@ void update_x_2b(const target* const the_target, const chain_architecture* const
   double pi_x = state->w_pis[iw_x];
   double pi_y = state->w_pis[iw_y];
 
+  int xtry = 0;
+  int ytry = 0;
+  int xacc = 0;
+  int yacc = 0;
   // update x
   {
     double* propx = (double*)malloc(state->n_dims*sizeof(double));  
+
+    // proposal - this is symmetric, i.e. q(x|y) = q(y|x) so prob. of acceptance just PI(xprop,y)/PI(x,y) (proposal ratio is 1) 
     for(int i = 0; i < state->n_dims; i++){ // propose a new position 
       propx[i] = state->w_xs[iw_x][i] + gsl_ran_gaussian(g_rng, Lprop_w); // normal (aka gaussian) proposal
     }
@@ -427,6 +433,7 @@ void update_x_2b(const target* const the_target, const chain_architecture* const
     double PI_x_y = state->t_PIs[it];
     double Dsqr_prop = Dsquared(state->n_dims, propx, state->w_xs[iw_y]);
     double PI_propx_y = PI(pi_propx, pi_y, it, state->n_levels, Kernel(Dsqr_prop, Lsqr), arch); 
+    xtry++;
     if( (PI_propx_y > PI_x_y)  ||  (gsl_rng_uniform(g_rng)*PI_x_y  <  PI_propx_y) ){ // Accept proposal
 
       int old_near_peak = state->w_near_peak[iw_x];
@@ -451,6 +458,7 @@ void update_x_2b(const target* const the_target, const chain_architecture* const
 
       state->t_dsqrs[it] = Dsqr_prop;
       state->t_PIs[it] = PI_propx_y;
+      xacc = 1;
     }else{ // Reject proposal
       free(propx);
     }
@@ -494,6 +502,7 @@ void update_x_2b(const target* const the_target, const chain_architecture* const
           state->t_dsqrs[it] = Dsqr_prop;
           state->t_PIs[it] = PI_x_propy;
           n_accepts++;
+          //   yacc = 1;
         }else{ // Reject proposal
           free(propy);
         }
@@ -513,6 +522,7 @@ void update_x_2b(const target* const the_target, const chain_architecture* const
         }
       
     }else{ // Symmetric
+      ytry++;
       double* propy = (double*)malloc(state->n_dims*sizeof(double));
       for(int i = 0; i < state->n_dims; i++){ // propose a new position
         propy[i] = state->w_xs[iw_y][i] + gsl_ran_gaussian(g_rng, Rprop_w); // normal (aka gaussian) proposal
@@ -542,12 +552,14 @@ void update_x_2b(const target* const the_target, const chain_architecture* const
 
         state->t_dsqrs[it] = Dsqr_prop;
         state->t_PIs[it] = PI_x_propy;
+        yacc = 1;
       }else{ // Reject proposal
         free(propy);
       }
     }
    
   }
+  // if(it == 0) {printf(" %4i  %4i   %4i  %4i XAXAX\n", xtry, ytry, xacc, yacc); }
 }
 
 void cold_transition_observe_and_count_sym(chain_state* state){
@@ -862,6 +874,7 @@ void step_2b(const target* const target, const chain_architecture* const arch, c
       push(state->all_coldx1s, state->w_xs[iw][1]); 
     }
   }
+  //  printf(" %8i %8i \n", state->t_Laccepts[0], state->t_Raccepts[0]);
 }
 
 void accumulate_x_sums(chain_state* state){ 

@@ -8,13 +8,13 @@ my $n_dimensions = 2;
 
 my $n_peaks = 2;
 my $peak_separation = 2.0;
-my $peak_widths = '0.25,0.25'; # e.g. '0.1, 0.2; 0.1, 0.25' : first peak: x[0] width: 0.1, x[1] width: 0.2, 2nd peak: x[0] width 0.1, x[1] width: 0.25. 
+my $peak_widths = '0.25,0.25;0.25,0.25'; # e.g. '0.1, 0.2; 0.1, 0.25' : first peak: x[0] width: 0.1, x[1] width: 0.2, 2nd peak: x[0] width 0.1, x[1] width: 0.25. 
 my $peak_heights = '1.0,0.25';
 my $peak_shape_param = 1.0;
 
 my $levels = 2;
 my $Thot_range = '1.2,2.0';
-my $kernel_scale = 0.5*$peak_separation;
+my $kernel_scale = 0.33*$peak_separation;
 
 
 my $proposal_width_factor = 0.5;
@@ -68,6 +68,8 @@ my $x = -0.5*$peak_separation;
 my $height = 1.0;
 $peak_widths =~ s/\s+//g; 
 my @peak_width_strings = split(";", $peak_widths);
+print "peak widths:  ", join(" ", @peak_width_strings), "\n";
+
 my @heights = split(",", $peak_heights);
 print "widths: ", join("; ", @peak_width_strings), "\n";
 print "heights: ", join("; ", @heights), "\n";
@@ -88,7 +90,8 @@ if(scalar @Thot_range == 1){
 for (my $Thot = $Thot_range[0]; $Thot <= $Thot_range[1] * sqrt($Thot_multiplier); $Thot *= $Thot_multiplier) {
    push @Thots, $Thot;
 }}
-# print("$target_string \n");
+print "Target string \n";
+print("$target_string \n");
 my ($Thot_min, $Thot_max) = split(',', $Thot_range);
 
 #for (my $Thot = $Thot_min; $Thot <= $Thot_max * $Thot_multiplier; $Thot *= $Thot_multiplier) {

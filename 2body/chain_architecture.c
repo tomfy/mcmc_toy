@@ -67,6 +67,7 @@ chain_architecture* set_up_chain_architecture( int n_levels, int n_per_level, in
   }else{ // pix*K_i(x,y)
     exit(1);
   }
+  print_chain_architecture_info(chain_arch);
   return chain_arch;
 }
 
@@ -88,7 +89,38 @@ double Kernel(double Dsq, double Lsq){ // convolution kernel
 }
 
 double PI(double pix, double piy, int it, int n_Ts, double K, const chain_architecture* const arch){
-  if(arch->symmetry == 1){
+  //  return pow((pix*piy), 1.0/(1.0 + it*1.0/(n_Ts - 1)));
+  //  return pix*piy;
+  if(1){  
+    if(it == 0){
+      return pix*piy;
+    }else if(it == (n_Ts-1)){
+      return pow((pix*piy),0.5)*K;
+    }else{
+      // double eps = (double)it*0.5/(n_Ts-1); 
+      double beta = pow(0.05, (double)it/(n_Ts-1));
+      //  double PIcold = pix*piy;
+      //  double PIhot = (pix + piy)*K;
+      //    printf("eps:  %8.4f \n", eps);
+      return pow((pix*piy), beta)*K;
+      //  return pow(PIcold, 1.0-eps) * pow(PIhot, eps);
+    }
+  }
+  if(1){   
+    if(it == 0){
+      return pix*piy;
+    }else if(it == (n_Ts-1)){
+      return (pix + piy)*K;
+    }else{
+      double eps = (double)it/(n_Ts-1);
+      //  double PIcold = pix*piy;
+      //  double PIhot = (pix + piy)*K;
+      //    printf("eps:  %8.4f \n", eps);
+      return pix*piy*pow((1.0/pix + 1.0/piy)*K, eps);
+      //  return pow(PIcold, 1.0-eps) * pow(PIhot, eps);
+    }
+  }else{
+    if(arch->symmetry == 1){
     if(it == 0){
       return pix*K;
     }else{
@@ -120,6 +152,7 @@ double PI(double pix, double piy, int it, int n_Ts, double K, const chain_archit
     }
   }else{ // asymmetrical
     return pix*K;
+  }
   }
 }
     
